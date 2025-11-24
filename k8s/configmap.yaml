@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lma-config
+data:
+  config.json: |
+    {
+      "hamha": {
+        "d_model": 512,
+        "d_head": 64,
+        "grid_radius": 2,
+        "use_hypernet": false,
+        "dropout": 0.1
+      },
+      "lma": {
+        "telemetry_window_size": 20,
+        "telemetry_collection_frequency": 1,
+        "kappa_threshold": 100.0,
+        "fixation_threshold": 0.3,
+        "drift_threshold": 0.9,
+        "entropy_derivative_threshold": -0.005,
+        "vanishing_gradient_threshold": 1e-06,
+        "exploding_gradient_threshold": 1000.0,
+        "entropy_reg_increment": 0.01,
+        "self_mixing_decay_factor": 0.95,
+        "neighbor_boost_factor": 1.05,
+        "prediction_horizon": 20,
+        "prediction_confidence_threshold": 0.7,
+        "cmcg_edge_confidence_threshold": 0.7,
+        "gnn_opt_target_t_mix": 35.0,
+        "adapt_bias_mode": "exploration"
+      }
+    }

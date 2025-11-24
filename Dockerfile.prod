@@ -1,0 +1,25 @@
+# Dockerfile.prod
+# Base image with CUDA support
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 AS base
+
+# Set up the Python environment
+RUN apt-get update && apt-get install -y python3.10 python3-pip && rm -rf /var/lib/apt/lists/*
+RUN ln -s /usr/bin/python3.10 /usr/bin/python
+
+# --- Builder Stage ---
+FROM base AS builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- Production Stage ---
+FROM base AS production
+WORKDIR /app
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY . /app
+
+# Health checks
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD python -c "import httpx; httpx.get('http://localhost:8000/health')"
+
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
