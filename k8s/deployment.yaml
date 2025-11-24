@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hamha-lma-prod
+  namespace: ml-systems
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    spec:
+      containers:
+      - name: hamha-lma
+        image: registry.company.com/hamha-lma:v9.0.0
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "8"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "24Gi"
+            cpu: "16"
+            nvidia.com/gpu: "1"
+        env:
+        - name: LMA_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: lma-config
+              key: config.json
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: telemetry-storage
+          mountPath: /data/telemetry
+      volumes:
+      - name: telemetry-storage
+        persistentVolumeClaim:
+          claimName: telemetry-pvc
