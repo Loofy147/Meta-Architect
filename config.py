@@ -5,6 +5,7 @@ from typing import Dict, Any
 @dataclass
 class HAMHAConfig:
     """Configuration for HAMHA system."""
+
     d_model: int = 512
     d_head: int = 64
     grid_radius: int = 2
@@ -15,6 +16,7 @@ class HAMHAConfig:
 @dataclass
 class LMAConfig:
     """Configuration for Lead Meta-Architect."""
+
     # Telemetry
     telemetry_window_size: int = 20
     telemetry_collection_frequency: int = 1  # Every N steps
@@ -47,6 +49,7 @@ class LMAConfig:
 @dataclass
 class SystemConfig:
     """Complete system configuration."""
+
     hamha: HAMHAConfig = None
     lma: LMAConfig = None
 
@@ -58,14 +61,11 @@ class SystemConfig:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
-        return {
-            'hamha': self.hamha.__dict__,
-            'lma': self.lma.__dict__
-        }
+        return {"hamha": self.hamha.__dict__, "lma": self.lma.__dict__}
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'SystemConfig':
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "SystemConfig":
         """Create from dictionary."""
-        hamha_config = HAMHAConfig(**config_dict.get('hamha', {}))
-        lma_config = LMAConfig(**config_dict.get('lma', {}))
+        hamha_config = HAMHAConfig(**config_dict.get("hamha", {}))
+        lma_config = LMAConfig(**config_dict.get("lma", {}))
         return cls(hamha=hamha_config, lma=lma_config)

@@ -8,6 +8,7 @@ from lma.hge import HypothesisGenerationEngine
 from lma.telemetry import TelemetrySnapshot
 from lma.architect import LeadMetaArchitect
 
+
 def test_hamha_forward():
     """Test basic forward pass."""
     d_model = 128
@@ -19,6 +20,7 @@ def test_hamha_forward():
     output = model(x)
     assert output.shape == (batch_size, seq_len, d_model)
 
+
 def test_hexagonal_topology():
     """Test hexagonal grid generation."""
     coords = generate_hex_grid(radius=2)
@@ -28,6 +30,7 @@ def test_hexagonal_topology():
     center = HexCoordinate(0, 0)
     neighbors = center.neighbors()
     assert len(neighbors) == 6
+
 
 def test_attention_head():
     """Test single attention head."""
@@ -40,6 +43,7 @@ def test_attention_head():
     output = head(x)
     assert output.shape == (batch_size, seq_len, 64)
 
+
 def test_telemetry_collection():
     """Test telemetry collector."""
     model = HexagonalMultiHeadAttention(128, 1)
@@ -48,22 +52,25 @@ def test_telemetry_collection():
     assert snapshot is not None
     assert snapshot.step == 0
 
+
 def test_cmcg_creation():
     """Test CMCG initialization."""
     cmcg = CrossModalCausalGraph()
     assert cmcg.graph.number_of_nodes() > 0
     assert cmcg.graph.number_of_edges() > 0
 
+
 def test_hypothesis_generation():
     """Test HGE."""
     cmcg = CrossModalCausalGraph()
     hge = HypothesisGenerationEngine(cmcg)
     snapshot = TelemetrySnapshot(step=0, timestamp=0.0)
-    snapshot.condition_numbers = {'H(0,0)_Q': 150.0}
-    snapshot.gradient_norms = {'H(0,0)': 1e-7}
+    snapshot.condition_numbers = {"H(0,0)_Q": 150.0}
+    snapshot.gradient_norms = {"H(0,0)": 1e-7}
 
     hypotheses = hge.generate_from_snapshot(snapshot)
     assert len(hypotheses) > 0
+
 
 def test_lma_integration():
     """Test full LMA integration."""
@@ -78,5 +85,5 @@ def test_lma_integration():
     loss.backward()
 
     result = lma.process_step()
-    assert 'snapshot' in result
-    assert 'status' in result
+    assert "snapshot" in result
+    assert "status" in result

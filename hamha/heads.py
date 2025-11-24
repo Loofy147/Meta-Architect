@@ -5,6 +5,7 @@ import math
 from typing import Optional, Tuple
 from hamha.topology import HexCoordinate
 
+
 class CoordinateBiasFunction(nn.Module):
     """Learnable coordinate-dependent bias for projection matrices."""
 
@@ -17,7 +18,7 @@ class CoordinateBiasFunction(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, d_model * d_head)
+            nn.Linear(hidden_dim, d_model * d_head),
         )
 
     def forward(self, q: int, r: int) -> torch.Tensor:
@@ -34,16 +35,12 @@ class HyperNetwork(nn.Module):
         self.d_model = d_model
         self.d_head = d_head
         self.context_encoder = nn.Sequential(
-            nn.Linear(d_model, context_dim),
-            nn.LayerNorm(context_dim),
-            nn.ReLU()
+            nn.Linear(d_model, context_dim), nn.LayerNorm(context_dim), nn.ReLU()
         )
         self.coord_embed = nn.Embedding(200, 32)
         input_dim = context_dim + 64
         self.weight_gen = nn.Sequential(
-            nn.Linear(input_dim, 512),
-            nn.ReLU(),
-            nn.Linear(512, d_model * d_head)
+            nn.Linear(input_dim, 512), nn.ReLU(), nn.Linear(512, d_model * d_head)
         )
 
     def forward(self, q: int, r: int, x_global: torch.Tensor) -> torch.Tensor:
@@ -59,9 +56,15 @@ class HyperNetwork(nn.Module):
 class AttentionHead(nn.Module):
     """Single attention head with coordinate-aware projections."""
 
-    def __init__(self, coord: HexCoordinate, d_model: int, d_head: int,
-                 use_hypernet: bool = False, bias_function: Optional[CoordinateBiasFunction] = None,
-                 hypernet: Optional[HyperNetwork] = None):
+    def __init__(
+        self,
+        coord: HexCoordinate,
+        d_model: int,
+        d_head: int,
+        use_hypernet: bool = False,
+        bias_function: Optional[CoordinateBiasFunction] = None,
+        hypernet: Optional[HyperNetwork] = None,
+    ):
         super().__init__()
         self.coord = coord
         self.d_model = d_model
@@ -84,8 +87,9 @@ class AttentionHead(nn.Module):
         self.attention_weights = None
         self.head_output = None
 
-    def get_projection_matrices(self, x_global: Optional[torch.Tensor] = None
-                               ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def get_projection_matrices(
+        self, x_global: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.use_hypernet and self.hypernet is not None:
             W_Q = self.hypernet(self.coord.q, self.coord.r, x_global)
             W_K = self.hypernet(self.coord.q, self.coord.r, x_global)
@@ -100,8 +104,12 @@ class AttentionHead(nn.Module):
             W_V = self.W_V_base + self.B_V * f
         return W_Q, W_K, W_V
 
-    def forward(self, x: torch.Tensor, x_global: Optional[torch.Tensor] = None,
-                entropy_reg: float = 0.0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_global: Optional[torch.Tensor] = None,
+        entropy_reg: float = 0.0,
+    ) -> torch.Tensor:
         W_Q, W_K, W_V = self.get_projection_matrices(x_global)
         Q = torch.matmul(x, W_Q)
         K = torch.matmul(x, W_K)

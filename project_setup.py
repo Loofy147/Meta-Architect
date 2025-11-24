@@ -688,7 +688,7 @@ if __name__ == "__main__":
     print()
     print("Copy the following files to your project:")
     print()
-    
+
     files = {
         "setup.py": SETUP_PY,
         "requirements.txt": REQUIREMENTS_TXT,
@@ -700,14 +700,14 @@ if __name__ == "__main__":
         "CHANGELOG.md": CHANGELOG_MD,
         "PROJECT_STRUCTURE.md": PROJECT_STRUCTURE_MD,
     }
-    
+
     for filename, content in files.items():
         print(f"{'─' * 70}")
         print(f"FILE: {filename}")
         print(f"{'─' * 70}")
         print(content.strip())
         print()
-    
+
     print("=" * 70)
     print("✓ All files generated successfully!")
     print("=" * 70)

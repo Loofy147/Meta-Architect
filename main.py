@@ -2,6 +2,7 @@ import torch
 from hamha.core import HexagonalMultiHeadAttention
 from lma.architect import LeadMetaArchitect
 
+
 def main_demo():
     """Demonstration of HAMHA with LMA governance."""
 
@@ -18,8 +19,8 @@ def main_demo():
     lma = LeadMetaArchitect(hamha)
 
     # Activate evolutionary modules
-    lma.command_activate_module('GNN_OPT', {'target_t_mix': 35})
-    lma.command_activate_module('ADAPT_BIAS', {'mode': 'exploration'})
+    lma.command_activate_module("GNN_OPT", {"target_t_mix": 35})
+    lma.command_activate_module("ADAPT_BIAS", {"mode": "exploration"})
 
     print("\n" + "═" * 70)
     print("SIMULATING TRAINING STEPS")
@@ -46,12 +47,12 @@ def main_demo():
             print(f"\n{'─' * 70}")
             print(f"STEP {step}")
             print(f"{'─' * 70}")
-            status = result['status']
+            status = result["status"]
             print(f"Health: {status['health']}")
             print(f"Avg Entropy: {status['avg_entropy']:.3f}")
             print(f"Max κ: {status['max_kappa']:.2f}")
             print(f"Alerts: {status['active_alerts']}")
-            if result['interventions']:
+            if result["interventions"]:
                 print(f"Interventions: {', '.join(result['interventions'])}")
 
     # Generate final report

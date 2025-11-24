@@ -7,6 +7,7 @@ import numpy as np
 @dataclass
 class HexCoordinate:
     """Axial coordinates for hexagonal grid positioning."""
+
     q: int
     r: int
 
@@ -14,20 +15,25 @@ class HexCoordinate:
         return hash((self.q, self.r))
 
     def __eq__(self, other):
-        return isinstance(other, HexCoordinate) and self.q == other.q and self.r == other.r
+        return (
+            isinstance(other, HexCoordinate) and self.q == other.q and self.r == other.r
+        )
 
     def __repr__(self):
         return f"H({self.q},{self.r})"
 
-    def neighbors(self) -> List['HexCoordinate']:
+    def neighbors(self) -> List["HexCoordinate"]:
         """Return the 6 direct neighbors in hexagonal grid."""
         directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
         return [HexCoordinate(self.q + dq, self.r + dr) for dq, dr in directions]
 
-    def distance(self, other: 'HexCoordinate') -> int:
+    def distance(self, other: "HexCoordinate") -> int:
         """Hexagonal grid distance."""
-        return (abs(self.q - other.q) + abs(self.q + self.r - other.q - other.r) +
-                abs(self.r - other.r)) // 2
+        return (
+            abs(self.q - other.q)
+            + abs(self.q + self.r - other.q - other.r)
+            + abs(self.r - other.r)
+        ) // 2
 
 
 def generate_hex_grid(radius: int) -> List[HexCoordinate]:

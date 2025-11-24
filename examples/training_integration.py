@@ -19,9 +19,7 @@ class LanguageModelWithHAMHA(nn.Module):
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.hamha = HexagonalMultiHeadAttention(d_model, grid_radius)
         self.feedforward = nn.Sequential(
-            nn.Linear(d_model, d_model * 4),
-            nn.GELU(),
-            nn.Linear(d_model * 4, d_model)
+            nn.Linear(d_model, d_model * 4), nn.GELU(), nn.Linear(d_model * 4, d_model)
         )
         self.output_proj = nn.Linear(d_model, vocab_size)
 
@@ -47,7 +45,7 @@ def train_with_lma_monitoring():
 
     # Initialize LMA
     lma = LeadMetaArchitect(model.hamha)
-    lma.command_activate_module('GNN_OPT', {'target_t_mix': 35})
+    lma.command_activate_module("GNN_OPT", {"target_t_mix": 35})
 
     # Training loop
     for epoch in range(10):
@@ -59,8 +57,7 @@ def train_with_lma_monitoring():
             # Forward pass
             logits = model(x)
             loss = nn.functional.cross_entropy(
-                logits.view(-1, vocab_size),
-                targets.view(-1)
+                logits.view(-1, vocab_size), targets.view(-1)
             )
 
             # Backward pass
@@ -71,7 +68,7 @@ def train_with_lma_monitoring():
             # LMA monitoring (every 10 steps)
             if batch_idx % 10 == 0:
                 result = lma.process_step()
-                status = result['status']
+                status = result["status"]
 
                 print(f"Epoch {epoch}, Batch {batch_idx}")
                 print(f"  Loss: {loss.item():.4f}")
@@ -79,7 +76,7 @@ def train_with_lma_monitoring():
                 print(f"  Avg Entropy: {status['avg_entropy']:.3f}")
 
                 # Check for interventions
-                if result['interventions']:
+                if result["interventions"]:
                     print(f"  Interventions: {result['interventions']}")
 
         # Epoch summary

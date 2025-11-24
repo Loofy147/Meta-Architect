@@ -1,13 +1,14 @@
 from hamha.core import HexagonalMultiHeadAttention
-from hamha.topology import HexCoordinate
 from lma.telemetry import TelemetryCollector, TelemetrySnapshot
 from lma.cmcg import CrossModalCausalGraph
 from lma.hge import HypothesisGenerationEngine
 from lma.adp import ArchitecturalDynamicsPredictor
 from lma.protocols import EmergencyProtocols
 from lma.evolutionary import EvolutionaryModules
+from hamha.topology import HexCoordinate
 from typing import Dict, List
 import numpy as np
+
 
 class LeadMetaArchitect:
     """
@@ -35,7 +36,9 @@ class LeadMetaArchitect:
         print("LEAD META-ARCHITECT INITIALIZED")
         print("═" * 70)
         print(f"Grid Size: {hamha_model.num_heads} heads")
-        print(f"Topology: Hexagonal (radius {int((hamha_model.num_heads - 1) / 3) if hamha_model.num_heads > 1 else 0})")
+        print(
+            f"Topology: Hexagonal (radius {max(abs(c.q) for c in hamha_model.grid_coords)})"
+        )
         print(f"Telemetry Streams: ACTIVE")
         print(f"CMCG Nodes: {self.cmcg.graph.number_of_nodes()}")
         print(f"CMCG Edges: {self.cmcg.graph.number_of_edges()}")
@@ -57,7 +60,7 @@ class LeadMetaArchitect:
             pred = self.adp.predict_entropy_trajectory(
                 self.telemetry.history, coord_str, steps_ahead=20
             )
-            if 'error' not in pred:
+            if "error" not in pred:
                 predictions[coord_str] = pred
 
         # 4. Check for intervention triggers
@@ -67,11 +70,11 @@ class LeadMetaArchitect:
         self._update_cmcg(snapshot)
 
         return {
-            'snapshot': snapshot,
-            'hypotheses': hypotheses,
-            'predictions': predictions,
-            'interventions': interventions,
-            'status': self._generate_status_report(snapshot)
+            "snapshot": snapshot,
+            "hypotheses": hypotheses,
+            "predictions": predictions,
+            "interventions": interventions,
+            "status": self._generate_status_report(snapshot),
         }
 
     def _evaluate_intervention_triggers(self, snapshot: TelemetrySnapshot) -> List[str]:
@@ -83,26 +86,28 @@ class LeadMetaArchitect:
 
             # Trigger AAP_AD Phase 1 if entropy < 0.85 or drift detected
             if entropy < 0.85 or (entropy < 0.9 and deriv < -0.008):
-                q, r = map(int, coord_str[2:-1].split(','))
+                q, r = map(int, coord_str[2:-1].split(","))
                 coord = HexCoordinate(q, r)
                 head_idx = self.model.coord_to_idx[coord]
 
                 # Check if already in monitoring
                 if coord_str not in self.monitoring_sectors:
                     self.monitoring_sectors[coord_str] = {
-                        'trigger_step': snapshot.step,
-                        'initial_entropy': entropy
+                        "trigger_step": snapshot.step,
+                        "initial_entropy": entropy,
                     }
 
                     result = self.protocols.trigger_aap_ad_phase1(head_idx)
                     interventions.append(result)
 
-                    self.alert_history.append({
-                        'step': snapshot.step,
-                        'type': 'AAP_AD_PHASE1',
-                        'target': coord_str,
-                        'reason': f"H={entropy:.3f}, ΔH={deriv:.4f}"
-                    })
+                    self.alert_history.append(
+                        {
+                            "step": snapshot.step,
+                            "type": "AAP_AD_PHASE1",
+                            "target": coord_str,
+                            "reason": f"H={entropy:.3f}, ΔH={deriv:.4f}",
+                        }
+                    )
 
         return interventions
 
@@ -119,21 +124,37 @@ class LeadMetaArchitect:
     def _generate_status_report(self, snapshot: TelemetrySnapshot) -> Dict:
         """Generate comprehensive status report."""
         # Compute grid-wide statistics
-        avg_entropy = np.mean(list(snapshot.attention_entropy.values())) if snapshot.attention_entropy else 0
-        max_kappa = max(snapshot.condition_numbers.values()) if snapshot.condition_numbers else 0
-        avg_grad = np.mean(list(snapshot.gradient_norms.values())) if snapshot.gradient_norms else 0
+        avg_entropy = (
+            np.mean(list(snapshot.attention_entropy.values()))
+            if snapshot.attention_entropy
+            else 0
+        )
+        max_kappa = (
+            max(snapshot.condition_numbers.values())
+            if snapshot.condition_numbers
+            else 0
+        )
+        avg_grad = (
+            np.mean(list(snapshot.gradient_norms.values()))
+            if snapshot.gradient_norms
+            else 0
+        )
 
         return {
-            'step': snapshot.step,
-            'health': 'OPTIMAL' if not snapshot.alerts else 'DEGRADED' if len(snapshot.alerts) < 3 else 'CRITICAL',
-            'avg_entropy': avg_entropy,
-            'max_kappa': max_kappa,
-            'avg_gradient_norm': avg_grad,
-            't_mix': snapshot.t_mix,
-            'throughput': snapshot.throughput_tps,
-            'active_alerts': len(snapshot.alerts),
-            'monitoring_sectors': len(self.monitoring_sectors),
-            'active_modules': self.evolutionary.get_active_modules()
+            "step": snapshot.step,
+            "health": (
+                "OPTIMAL"
+                if not snapshot.alerts
+                else "DEGRADED" if len(snapshot.alerts) < 3 else "CRITICAL"
+            ),
+            "avg_entropy": avg_entropy,
+            "max_kappa": max_kappa,
+            "avg_gradient_norm": avg_grad,
+            "t_mix": snapshot.t_mix,
+            "throughput": snapshot.throughput_tps,
+            "active_alerts": len(snapshot.alerts),
+            "monitoring_sectors": len(self.monitoring_sectors),
+            "active_modules": self.evolutionary.get_active_modules(),
         }
 
     def command_activate_module(self, module_name: str, parameters: Dict = None):
@@ -145,7 +166,7 @@ class LeadMetaArchitect:
         self.model.entropy_reg += delta
         return f"Entropy regularization: {self.model.entropy_reg}"
 
-    def command_reset_head(self, coord: HexCoordinate, strategy: str = 'orthogonal'):
+    def command_reset_head(self, coord: HexCoordinate, strategy: str = "orthogonal"):
         """LMA Command: Reset specific head projections."""
         head_idx = self.model.coord_to_idx[coord]
         return self.protocols.reset_head_projections(head_idx, strategy)
@@ -185,7 +206,9 @@ RECENT INTERVENTIONS:
 
         report += f"\nACTIVE HYPOTHESES: {len(self.hge.active_hypotheses)}\n"
         for hyp in self.hge.active_hypotheses[-3:]:
-            report += f"  • {hyp.id}: {hyp.description} (confidence: {hyp.confidence:.2f})\n"
+            report += (
+                f"  • {hyp.id}: {hyp.description} (confidence: {hyp.confidence:.2f})\n"
+            )
 
         report += "\n" + "═" * 70
         return report

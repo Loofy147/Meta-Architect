@@ -16,7 +16,9 @@ class MetricsCalculator:
     def compute_attention_entropy(attention_weights: torch.Tensor) -> float:
         """Compute entropy of attention distribution."""
         # attention_weights: [batch, seq_len, seq_len]
-        entropy = -(attention_weights * torch.log(attention_weights + 1e-10)).sum(dim=-1)
+        entropy = -(attention_weights * torch.log(attention_weights + 1e-10)).sum(
+            dim=-1
+        )
         return entropy.mean().item()
 
     @staticmethod
@@ -26,7 +28,7 @@ class MetricsCalculator:
         for p in parameters:
             if p.grad is not None:
                 total_norm += p.grad.data.norm(2).item() ** 2
-        return total_norm ** 0.5
+        return total_norm**0.5
 
     @staticmethod
     def compute_spectral_radius(matrix: torch.Tensor) -> float:

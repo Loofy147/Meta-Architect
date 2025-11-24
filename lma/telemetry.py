@@ -4,9 +4,11 @@ import time
 import torch
 from hamha.core import HexagonalMultiHeadAttention
 
+
 @dataclass
 class TelemetrySnapshot:
     """Single timestep telemetry data."""
+
     step: int
     timestamp: float
 
@@ -46,17 +48,14 @@ class TelemetryCollector:
 
     def collect(self) -> TelemetrySnapshot:
         """Collect current telemetry snapshot."""
-        snapshot = TelemetrySnapshot(
-            step=self.current_step,
-            timestamp=time.time()
-        )
+        snapshot = TelemetrySnapshot(step=self.current_step, timestamp=time.time())
 
         # Spectral analysis
         for i, head in enumerate(self.model.heads):
             coord = head.coord
             W_Q, W_K, W_V = head.get_projection_matrices()
 
-            for name, W in [('Q', W_Q), ('K', W_K), ('V', W_V)]:
+            for name, W in [("Q", W_Q), ("K", W_K), ("V", W_V)]:
                 U, S, Vh = torch.linalg.svd(W, full_matrices=False)
                 kappa = S.max() / (S.min() + 1e-8)
                 key = f"H{coord}_{name}"
@@ -88,12 +87,17 @@ class TelemetryCollector:
 
                 # Compute derivative if history exists
                 if len(self.history) > 0:
-                    prev_entropy = self.history[-1].attention_entropy.get(str(coord), entropy)
+                    prev_entropy = self.history[-1].attention_entropy.get(
+                        str(coord), entropy
+                    )
                     snapshot.entropy_derivatives[str(coord)] = entropy - prev_entropy
 
                 if entropy < 0.3:
                     snapshot.alerts.append(f"FIXATION: {coord} H={entropy:.3f}")
-                elif entropy < 0.9 and snapshot.entropy_derivatives.get(str(coord), 0) < 0:
+                elif (
+                    entropy < 0.9
+                    and snapshot.entropy_derivatives.get(str(coord), 0) < 0
+                ):
                     snapshot.alerts.append(f"DRIFT: {coord} H={entropy:.3f}")
 
         self.history.append(snapshot)
