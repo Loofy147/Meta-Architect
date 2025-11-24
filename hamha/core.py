@@ -1,15 +1,21 @@
 import torch
 import torch.nn as nn
-from hamha.topology import generate_hex_grid, build_adjacency_matrix
-from hamha.heads import AttentionHead, CoordinateBiasFunction, HyperNetwork
-from hamha.mixing import GNNMixingLayer
 import math
+from hamha.topology import generate_hex_grid, build_adjacency_matrix
+from hamha.heads import CoordinateBiasFunction, HyperNetwork, AttentionHead
+from hamha.mixing import GNNMixingLayer
+
 
 class HexagonalMultiHeadAttention(nn.Module):
     """Complete HAMHA mechanism with hexagonal topology."""
 
-    def __init__(self, d_model: int, grid_radius: int = 2, d_head: int = 64,
-                 use_hypernet: bool = False):
+    def __init__(
+        self,
+        d_model: int,
+        grid_radius: int = 2,
+        d_head: int = 64,
+        use_hypernet: bool = False,
+    ):
         super().__init__()
         self.d_model = d_model
         self.d_head = d_head
@@ -20,15 +26,25 @@ class HexagonalMultiHeadAttention(nn.Module):
         self.bias_function = CoordinateBiasFunction(d_model, d_head)
         self.hypernet = HyperNetwork(d_model, d_head) if use_hypernet else None
 
-        self.heads = nn.ModuleList([
-            AttentionHead(coord, d_model, d_head, use_hypernet,
-                         self.bias_function, self.hypernet)
-            for coord in self.grid_coords
-        ])
+        self.heads = nn.ModuleList(
+            [
+                AttentionHead(
+                    coord,
+                    d_model,
+                    d_head,
+                    use_hypernet,
+                    self.bias_function,
+                    self.hypernet,
+                )
+                for coord in self.grid_coords
+            ]
+        )
 
         adjacency = build_adjacency_matrix(self.grid_coords)
         self.gnn_mixing = GNNMixingLayer(d_head, self.num_heads, adjacency)
-        self.W_O = nn.Parameter(torch.randn(self.num_heads * d_head, d_model) / math.sqrt(d_model))
+        self.W_O = nn.Parameter(
+            torch.randn(self.num_heads * d_head, d_model) / math.sqrt(d_model)
+        )
 
         # Entropy regularization coefficient (controlled by LMA)
         self.entropy_reg = 0.0
