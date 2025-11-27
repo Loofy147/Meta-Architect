@@ -3,7 +3,7 @@ import torch.nn as nn
 import math
 from hamha.topology import generate_hex_grid, build_adjacency_matrix
 from hamha.heads import CoordinateBiasFunction, HyperNetwork, AttentionHead
-from hamha.mixing import GNNMixingLayer
+from hamha.mixing import SpectralMixingLayer
 
 
 class HexagonalMultiHeadAttention(nn.Module):
@@ -41,7 +41,7 @@ class HexagonalMultiHeadAttention(nn.Module):
         )
 
         adjacency = build_adjacency_matrix(self.grid_coords)
-        self.gnn_mixing = GNNMixingLayer(d_head, self.num_heads, adjacency)
+        self.gnn_mixing = SpectralMixingLayer(d_head, self.num_heads, adjacency)
         self.W_O = nn.Parameter(
             torch.randn(self.num_heads * d_head, d_model) / math.sqrt(d_model)
         )
