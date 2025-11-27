@@ -44,13 +44,13 @@ class HyperNetwork(nn.Module):
         )
 
     def forward(self, q: int, r: int, x_global: torch.Tensor) -> torch.Tensor:
-        context = self.context_encoder(x_global.mean(dim=0))
+        context = self.context_encoder(x_global)
         q_embed = self.coord_embed(torch.tensor(q + 100).clamp(0, 199))
         r_embed = self.coord_embed(torch.tensor(r + 100).clamp(0, 199))
-        coord_features = torch.cat([q_embed, r_embed])
-        combined = torch.cat([context, coord_features])
+        coord_features = torch.cat([q_embed, r_embed]).unsqueeze(0).expand(context.shape[0], -1)
+        combined = torch.cat([context, coord_features], dim=1)
         W_flat = self.weight_gen(combined)
-        return W_flat.view(self.d_model, self.d_head)
+        return W_flat.view(-1, self.d_model, self.d_head)
 
 
 class AttentionHead(nn.Module):
@@ -99,9 +99,9 @@ class AttentionHead(nn.Module):
                 f = self.bias_function(self.coord.q, self.coord.r)
             else:
                 f = torch.zeros(self.d_model, self.d_head)
-            W_Q = self.W_Q_base + self.B_Q * f
-            W_K = self.W_K_base + self.B_K * f
-            W_V = self.W_V_base + self.B_V * f
+            W_Q = (self.W_Q_base + self.B_Q * f).unsqueeze(0)
+            W_K = (self.W_K_base + self.B_K * f).unsqueeze(0)
+            W_V = (self.W_V_base + self.B_V * f).unsqueeze(0)
         return W_Q, W_K, W_V
 
     def forward(
@@ -111,11 +111,11 @@ class AttentionHead(nn.Module):
         entropy_reg: float = 0.0,
     ) -> torch.Tensor:
         W_Q, W_K, W_V = self.get_projection_matrices(x_global)
-        Q = torch.matmul(x, W_Q)
-        K = torch.matmul(x, W_K)
-        V = torch.matmul(x, W_V)
+        Q = torch.einsum("bnd,bdh->bnh", x, W_Q)
+        K = torch.einsum("bnd,bdh->bnh", x, W_K)
+        V = torch.einsum("bnd,bdh->bnh", x, W_V)
 
-        scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_head)
+        scores = torch.einsum("bnh,bmh->bnm", Q, K) / math.sqrt(self.d_head)
 
         # Entropy regularization (for diversity enforcement)
         if entropy_reg > 0:
@@ -124,6 +124,6 @@ class AttentionHead(nn.Module):
         attn_weights = F.softmax(scores, dim=-1)
         self.attention_weights = attn_weights.detach()
 
-        output = torch.matmul(attn_weights, V)
+        output = torch.einsum("bnm,bmh->bnh", attn_weights, V)
         self.head_output = output.detach()
         return output

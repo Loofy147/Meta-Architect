@@ -3,12 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import List
 import math
-import numpy as np
 
-
-class SpectralMixingLayer(nn.Module):
+class GNNMixingLayer(nn.Module):
     """
-    Applies a spectral filter to the head outputs using the graph Laplacian.
+    Vectorized GNN mixing using sparse matrix operations.
+
+    Performance improvements:
+    - Batch matrix multiplication instead of loops
     """
 
     def __init__(
@@ -21,33 +22,24 @@ class SpectralMixingLayer(nn.Module):
         self.d_head = d_head
         self.num_heads = num_heads
 
-        # --- Eigendecomposition of the Graph Laplacian ---
-        L, U, eigenvalues = self._compute_laplacian_eigen(adjacency_matrix)
-        self.register_buffer("L", L)  # Laplacian
-        self.register_buffer("U", U)  # Eigenvectors
-        self.register_buffer("eigenvalues", eigenvalues)
+        self.register_buffer("adjacency_dense", adjacency_matrix)
 
-        # --- Learnable Spectral Filter ---
-        # Initialize filters close to identity (pass-through)
-        self.spectral_filter = nn.Parameter(torch.ones(num_heads, 1))
+        # Learnable parameters
+        self.W_self = nn.Parameter(torch.randn(d_head, d_head) / math.sqrt(d_head))
+        self.W_neighbor = nn.Parameter(torch.randn(d_head, d_head) / math.sqrt(d_head))
 
+        # Per-head mixing coefficients
+        self.lambda_self = nn.Parameter(torch.ones(num_heads) * 0.7)
+
+        # Edge-specific weights (vectorized)
+        self.g_ij = nn.Parameter(torch.ones(num_heads, num_heads) * 0.05)
+
+        # Optional: Layer normalization for stability
         self.norm = nn.LayerNorm(d_head)
-
-    def _compute_laplacian_eigen(self, adj):
-        """Computes the normalized graph Laplacian and its eigendecomposition."""
-        deg = torch.sum(adj, dim=1)
-        deg_inv_sqrt = deg.pow(-0.5)
-        deg_inv_sqrt[torch.isinf(deg_inv_sqrt)] = 0
-        D_inv_sqrt = torch.diag(deg_inv_sqrt)
-        L = torch.eye(adj.size(0)) - D_inv_sqrt @ adj @ D_inv_sqrt
-
-        # Eigendecomposition
-        eigenvalues, eigenvectors = torch.linalg.eigh(L)
-        return L, eigenvectors, eigenvalues
 
     def forward(self, head_outputs: List[torch.Tensor]) -> List[torch.Tensor]:
         """
-        Apply spectral graph filtering.
+        Vectorized forward pass.
 
         Args:
             head_outputs: List of [batch, seq_len, d_head] tensors
@@ -58,74 +50,78 @@ class SpectralMixingLayer(nn.Module):
         # Stack all heads: [num_heads, batch, seq_len, d_head]
         stacked = torch.stack(head_outputs, dim=0)
 
-        # --- Graph Fourier Transform ---
-        # Project inputs onto eigenvectors
-        # [heads, b, s, d] -> [b, s, d, heads]
-        x_reshaped = stacked.permute(1, 2, 3, 0)
-        # [b, s, d, heads] @ [heads, heads] -> [b, s, d, heads]
-        x_spectral = torch.matmul(x_reshaped, self.U)
+        # Self contribution: [num_heads, batch, seq_len, d_head]
+        self_contrib = torch.einsum('hbsd,de->hbse', stacked, self.W_self)
+        self_contrib = self_contrib * self.lambda_self.view(-1, 1, 1, 1)
 
-        # --- Apply Spectral Filter ---
-        # [b, s, d, heads] * [heads, 1] -> [b, s, d, heads]
-        filtered_spectral = x_spectral * self.spectral_filter.T
+        # Neighbor aggregation using vectorized ops
+        # [num_heads, batch, seq_len, d_head] @ [d_head, d_head]
+        # -> [num_heads, batch, seq_len, d_head]
+        transformed = torch.einsum('hbsd,de->hbse', stacked, self.W_neighbor)
 
-        # --- Inverse Graph Fourier Transform ---
-        # Project back to node domain
-        # [b, s, d, heads] @ [heads, heads] -> [b, s, d, heads]
-        mixed_reshaped = torch.matmul(filtered_spectral, self.U.T)
+        # Apply edge weights and aggregate
+        # g_ij: [num_heads, num_heads] (source, target)
+        # adjacency: [num_heads, num_heads]
+        edge_weights = self.g_ij * self.adjacency_dense
 
-        # [b, s, d, heads] -> [heads, b, s, d]
-        mixed = mixed_reshaped.permute(3, 0, 1, 2)
+        # [target_heads, batch, seq, d_head] =
+        #   [target, source] @ [source, batch, seq, d_head]
+        neighbor_contrib = torch.einsum(
+            'ts,sbde->tbde',
+            edge_weights,
+            transformed
+        )
 
-        # Apply normalization
+        # Combine and activate
+        mixed = F.relu(self_contrib + neighbor_contrib)
+
+        # Apply normalization for stability
         mixed = self.norm(mixed)
 
+        # Unstack back to list
         return [mixed[i] for i in range(self.num_heads)]
 
     def get_mixing_statistics(self) -> dict:
         """Return diagnostic information about mixing patterns."""
         return {
-            "spectral_filter_weights": self.spectral_filter.detach().cpu().numpy().flatten(),
-            "eigenvalues": self.eigenvalues.detach().cpu().numpy()
+            'self_weights': self.lambda_self.detach().cpu().numpy(),
+            'neighbor_weights': self.g_ij.detach().cpu().numpy(),
+            'avg_self_weight': self.lambda_self.mean().item(),
+            'avg_neighbor_weight': self.g_ij.mean().item(),
+            'effective_neighbors': (self.adjacency_dense.sum(dim=1)).cpu().numpy()
         }
 
 def benchmark_mixing_layers():
     """Compare performance of original vs optimized mixing."""
     import time
 
-    class GNNMixingLayer(nn.Module):
-        """Vectorized GNN mixing using sparse matrix operations."""
+    class OriginalGNNMixingLayer(nn.Module):
+        """Graph Neural Network-based mixing of attention head outputs."""
 
-        def __init__(
-            self,
-            d_head: int,
-            num_heads: int,
-            adjacency_matrix: torch.Tensor,
-        ):
+        def __init__(self, d_head: int, num_heads: int, adjacency_matrix: torch.Tensor):
             super().__init__()
             self.d_head = d_head
             self.num_heads = num_heads
-            self.register_buffer("adjacency_dense", adjacency_matrix)
+            self.register_buffer("adjacency", adjacency_matrix)
+
             self.W_self = nn.Parameter(torch.randn(d_head, d_head) / math.sqrt(d_head))
             self.W_neighbor = nn.Parameter(torch.randn(d_head, d_head) / math.sqrt(d_head))
             self.lambda_self = nn.Parameter(torch.ones(num_heads) * 0.7)
             self.g_ij = nn.Parameter(torch.ones(num_heads, num_heads) * 0.05)
-            self.norm = nn.LayerNorm(d_head)
 
         def forward(self, head_outputs: List[torch.Tensor]) -> List[torch.Tensor]:
-            stacked = torch.stack(head_outputs, dim=0)
-            self_contrib = torch.einsum('hbsd,de->hbse', stacked, self.W_self)
-            self_contrib = self_contrib * self.lambda_self.view(-1, 1, 1, 1)
-            transformed = torch.einsum('hbsd,de->hbse', stacked, self.W_neighbor)
-            edge_weights = self.g_ij * self.adjacency_dense
-            neighbor_contrib = torch.einsum(
-                'ts,sbde->tbde',
-                edge_weights,
-                transformed
-            )
-            mixed = F.relu(self_contrib + neighbor_contrib)
-            mixed = self.norm(mixed)
-            return [mixed[i] for i in range(self.num_heads)]
+            mixed_outputs = []
+            for i, H_i in enumerate(head_outputs):
+                self_contrib = self.lambda_self[i] * torch.matmul(H_i, self.W_self)
+                neighbor_contrib = torch.zeros_like(H_i)
+                for j, H_j in enumerate(head_outputs):
+                    if self.adjacency[i, j] > 0:
+                        neighbor_contrib += self.g_ij[i, j] * torch.matmul(
+                            H_j, self.W_neighbor
+                        )
+                mixed = F.relu(self_contrib + neighbor_contrib)
+                mixed_outputs.append(mixed)
+            return mixed_outputs
 
     d_head = 64
     num_heads = 19  # radius=2
@@ -135,35 +131,34 @@ def benchmark_mixing_layers():
     # Create dummy adjacency
     adjacency = torch.randn(num_heads, num_heads).abs()
     adjacency = (adjacency > 0.5).float()
-    adjacency = (adjacency + adjacency.T) / 2 # Symmetrize
 
     # Create dummy inputs
     head_outputs = [torch.randn(batch_size, seq_len, d_head) for _ in range(num_heads)]
 
-    # GNN Layer
-    gnn_layer = GNNMixingLayer(d_head, num_heads, adjacency)
+    # Original
+    original = OriginalGNNMixingLayer(d_head, num_heads, adjacency)
 
-    # Spectral Layer
-    spectral_layer = SpectralMixingLayer(d_head, num_heads, adjacency)
+    # Optimized
+    optimized = GNNMixingLayer(d_head, num_heads, adjacency)
 
     # Benchmark
     iterations = 100
 
-    # GNN
+    # Original
     start = time.time()
     for _ in range(iterations):
-        _ = gnn_layer(head_outputs)
-    gnn_time = time.time() - start
+        _ = original(head_outputs)
+    original_time = time.time() - start
 
-    # Spectral
+    # Optimized
     start = time.time()
     for _ in range(iterations):
-        _ = spectral_layer(head_outputs)
-    spectral_time = time.time() - start
+        _ = optimized(head_outputs)
+    optimized_time = time.time() - start
 
-    print(f"GNN Layer: {gnn_time:.4f}s")
-    print(f"Spectral Layer: {spectral_time:.4f}s")
-    print(f"Performance Ratio (GNN/Spectral): {gnn_time / spectral_time:.2f}x")
+    print(f"Original: {original_time:.4f}s")
+    print(f"Optimized: {optimized_time:.4f}s")
+    print(f"Speedup: {original_time / optimized_time:.2f}x")
 
 
 if __name__ == "__main__":
