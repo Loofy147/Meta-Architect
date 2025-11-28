@@ -1,10 +1,9 @@
+# FILE: lma/protocols.py (FIXED VERSION)
+
 import torch
 import time
 from typing import List, Dict, Optional
 from hamha.core import HexagonalMultiHeadAttention
-from lma.task_encoder import TaskEncoder
-from lma.meta_nas import MetaNASController
-from lma.search_space import is_valid_architecture
 
 
 class EmergencyProtocols:
@@ -21,20 +20,26 @@ class EmergencyProtocols:
         self.meta_nas_controller = meta_nas_controller
         self.protocol_history: List[Dict] = []
 
+        # Check if Meta-NAS is available
+        self.meta_nas_enabled = (task_encoder is not None and
+                                 meta_nas_controller is not None)
+
     def trigger_aap_ad_phase1(
         self, target_head_idx: int, entropy_reg_increment: float = 0.01
     ):
         """Attention Diversity Protocol - Phase 1: Soft Intervention."""
         self.model.entropy_reg += entropy_reg_increment
 
-        # Decay self-mixing coefficient
-        self.model.gnn_mixing.lambda_self.data[target_head_idx] *= 0.95
+        # Only apply GNN mixing adjustments if not using spectral attention
+        if not self.model.use_spectral and hasattr(self.model, 'gnn_mixing'):
+            # Decay self-mixing coefficient
+            self.model.gnn_mixing.lambda_self.data[target_head_idx] *= 0.95
 
-        # Boost neighbor influence
-        adj = self.model.gnn_mixing.adjacency
-        for j in range(self.model.num_heads):
-            if adj[target_head_idx, j] > 0:
-                self.model.gnn_mixing.g_ij.data[target_head_idx, j] *= 1.05
+            # Boost neighbor influence
+            adj = self.model.gnn_mixing.adjacency_dense
+            for j in range(self.model.num_heads):
+                if adj[target_head_idx, j] > 0:
+                    self.model.gnn_mixing.g_ij.data[target_head_idx, j] *= 1.05
 
         self.protocol_history.append(
             {
@@ -49,6 +54,10 @@ class EmergencyProtocols:
 
     def trigger_aap_ad_phase2(self, target_head_idx: int):
         """Attention Diversity Protocol - Phase 2: Hard Intervention."""
+        # Only works with non-spectral HAMHA
+        if self.model.use_spectral:
+            return "AAP_AD_PHASE2 not applicable for spectral attention"
+
         head = self.model.heads[target_head_idx]
 
         # Add random perturbation to projection matrices
@@ -72,6 +81,10 @@ class EmergencyProtocols:
         self, target_head_idx: int, strategy: str = "orthogonal"
     ):
         """Reset projection matrices for a head."""
+        # Only works with non-spectral HAMHA
+        if self.model.use_spectral:
+            return "Head reset not applicable for spectral attention"
+
         head = self.model.heads[target_head_idx]
 
         with torch.no_grad():

@@ -1,3 +1,5 @@
+# FILE: lma/telemetry.py (FIXED VERSION)
+
 from dataclasses import dataclass, field
 from typing import Dict, List
 import time
@@ -47,6 +49,9 @@ class TelemetryCollector:
         self.current_step = 0
         self.is_spectral = hamha_model.use_spectral
 
+        # Detect if model uses spectral attention
+        self.is_spectral = hamha_model.use_spectral
+
     def collect(self) -> TelemetrySnapshot:
         """Collect current telemetry snapshot."""
         snapshot = TelemetrySnapshot(step=self.current_step, timestamp=time.time())
@@ -67,6 +72,10 @@ class TelemetryCollector:
             W_Q, W_K, W_V = head.get_projection_matrices()
 
             for name, W in [("Q", W_Q), ("K", W_K), ("V", W_V)]:
+                # Handle both batched and non-batched projection matrices
+                if W.dim() == 3:
+                    W = W[0]  # Take first batch element for analysis
+
                 U, S, Vh = torch.linalg.svd(W, full_matrices=False)
                 kappa = S.max() / (S.min() + 1e-8)
                 key = f"H{coord}_{name}"

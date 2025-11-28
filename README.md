@@ -198,21 +198,40 @@ Where `j ∈ Neighbors(i)` in the hexagonal graph.
 
 ## 🔬 Advanced Features
 
-### 1. Spectral Attention
+### 1. Meta-NAS Integration
 
-HAMHA now supports **Spectral Attention**, a mechanism that operates in the frequency domain of the graph. This allows for efficient long-range information propagation and provides a new way to analyze the model's behavior.
+The LMA now integrates a **Meta-Neural Architecture Search (Meta-NAS)** system, allowing it to adapt the HAMHA architecture for new tasks dynamically.
 
-To use Spectral Attention, set `use_spectral=True` when initializing the `HexagonalMultiHeadAttention` module:
+**Initialization**: To enable Meta-NAS, set `enable_meta_nas=True` when creating the `LeadMetaArchitect`:
 
 ```python
-hamha = HexagonalMultiHeadAttention(
-    d_model=512,
-    grid_radius=2,
-    use_spectral=True
-)
+# Initialize LMA with Meta-NAS capabilities
+lma = LeadMetaArchitect(hamha_model, enable_meta_nas=True)
+
+# Trigger an architecture adaptation
+sample_data = torch.randn(10, 20, 128) # Sample data from a new task
+result = lma.command_adapt_architecture(sample_data)
+print(result)
+# >>> "ADAPT_ARCHITECTURE complete. New architecture: {'d_head': 32, ...}"
 ```
 
-### 2. Autonomous Intervention
+### 2. Spectral vs. Non-Spectral Modes
+
+HAMHA can operate in two distinct modes: standard (non-spectral) and spectral. The LMA's telemetry and intervention capabilities adapt accordingly.
+
+| Feature | Standard (Non-Spectral) Mode | Spectral Mode |
+|---|---|---|
+| **Telemetry** | Based on individual head projection matrices (`W_Q`, `W_K`, `W_V`). | Based on spectral filter responses and global projection matrices. |
+| **Intervention** | Can reset or perturb individual heads (`reset_head_projections`). | Interventions are global (e.g., adjusting entropy regularization). Head-specific resets are not applicable. |
+| **Performance** | Faster for smaller grids, excels at local feature extraction. | More efficient for large grids, better at capturing long-range dependencies. |
+
+To use Spectral Attention, set `use_spectral=True` during `HexagonalMultiHeadAttention` initialization:
+
+```python
+hamha_spectral = HexagonalMultiHeadAttention(d_model=512, grid_radius=3, use_spectral=True)
+```
+
+### 3. Autonomous Intervention
 
 When the LMA detects entropy drift:
 
@@ -244,7 +263,12 @@ for h in hypotheses:
 # >>> H-001: Rank collapse causing vanishing gradient (confidence: 0.85)
 ```
 
-### 4. Manual LMA Commands
+### 4. Known Limitations
+
+- **State Reset on Adaptation**: When `lma.command_adapt_architecture()` is called, the existing `HexagonalMultiHeadAttention` model is replaced with a new instance. This means that learned weights are not transferred, and the model is effectively re-initialized. Future work aims to implement weight-preserving adaptation strategies.
+- **Single-GPU Training**: The current implementation is optimized for single-GPU training. Multi-GPU support is planned for a future release.
+
+### 5. Manual LMA Commands
 
 ```python
 # Activate evolutionary module

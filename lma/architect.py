@@ -1,3 +1,5 @@
+# FILE: lma/architect.py (FIXED VERSION)
+
 from hamha.core import HexagonalMultiHeadAttention
 from lma.telemetry import TelemetryCollector, TelemetrySnapshot
 from lma.cmcg import CrossModalCausalGraph
@@ -8,7 +10,7 @@ from lma.evolutionary import EvolutionaryModules
 from lma.task_encoder import TaskEncoder
 from lma.meta_nas import MetaNASController
 from hamha.topology import HexCoordinate
-from typing import Dict, List
+from typing import Dict, List, Optional
 import numpy as np
 import torch
 
@@ -50,9 +52,8 @@ class LeadMetaArchitect:
         print("LEAD META-ARCHITECT INITIALIZED")
         print("═" * 70)
         print(f"Grid Size: {hamha_model.num_heads} heads")
-        print(
-            f"Topology: Hexagonal (radius {max(abs(c.q) for c in hamha_model.grid_coords)})"
-        )
+        print(f"Topology: Hexagonal (radius {max(abs(c.q) for c in hamha_model.grid_coords)})")
+        print(f"Meta-NAS: {'ENABLED' if enable_meta_nas else 'DISABLED'}")
         print(f"Telemetry Streams: ACTIVE")
         print(f"CMCG Nodes: {self.cmcg.graph.number_of_nodes()}")
         print(f"CMCG Edges: {self.cmcg.graph.number_of_edges()}")
@@ -169,6 +170,7 @@ class LeadMetaArchitect:
             "active_alerts": len(snapshot.alerts),
             "monitoring_sectors": len(self.monitoring_sectors),
             "active_modules": self.evolutionary.get_active_modules(),
+            "meta_nas_enabled": self.enable_meta_nas,
         }
 
     def command_activate_module(self, module_name: str, parameters: Dict = None):
@@ -216,6 +218,7 @@ class LeadMetaArchitect:
 
 STEP: {status['step']}
 SYSTEM HEALTH: {status['health']}
+META-NAS: {'ENABLED' if status['meta_nas_enabled'] else 'DISABLED'}
 
 TELEMETRY SUMMARY:
   • Average Entropy: {status['avg_entropy']:.3f}
