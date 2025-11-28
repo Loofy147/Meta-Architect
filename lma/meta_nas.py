@@ -42,6 +42,11 @@ class MetaNASController(nn.Module):
     def forward(self, task_embedding: torch.Tensor) -> dict:
         """
         Generates an architectural description from a task embedding.
+
+        This implementation uses a simple feed-forward network to produce a set of
+        logits for each hyperparameter in the search space. It then
+        deterministically selects the hyperparameter value with the highest logit
+        for each choice.
         """
         logits = self.layers(task_embedding)
 

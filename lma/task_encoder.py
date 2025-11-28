@@ -34,6 +34,11 @@ class TaskEncoder(nn.Module):
     def forward(self, sample_data: torch.Tensor) -> torch.Tensor:
         """
         Generates a task embedding from a sample of task data.
+
+        This implementation takes a sample batch of data and computes a simple
+        representation by taking the mean across the batch and sequence dimensions.
+        This representation is then passed through a small neural network to
+        produce the final task embedding.
         """
         # For now, we'll use the mean of the sample data as the input to the encoder.
         # This is a simple way to get a representation of the data's distribution.

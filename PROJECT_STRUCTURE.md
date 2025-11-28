@@ -8,6 +8,9 @@ hamha-lma/
 │   ├── core.py                # Main HAMHA module
 │   ├── heads.py               # Attention head implementations
 │   ├── mixing.py              # GNN mixing layer
+│   ├── spectral/              # Spectral Attention
+│   │   ├── __init__.py
+│   │   └── attention.py
 │   └── topology.py            # Hexagonal grid utilities
 │
 ├── lma/                        # Lead Meta-Architect
@@ -19,7 +22,10 @@ hamha-lma/
 │   ├── cmcg.py                # Cross-Modal Causal Graph
 │   ├── edas.py                # Experiment Design & Analysis
 │   ├── protocols.py           # Emergency response protocols
-│   └── evolutionary.py        # Evolutionary horizon modules
+│   ├── evolutionary.py        # Evolutionary horizon modules
+│   ├── meta_nas.py            # Meta-NAS Controller
+│   ├── task_encoder.py        # Task Encoder
+│   └── search_space.py        # Meta-NAS Search Space
 │
 ├── utils/                      # Utilities
 │   ├── __init__.py
