@@ -38,6 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration examples
 - Contributing guidelines
 
+[1.1.0] - 2024-05-17
+
+### Added
+- Meta-NAS with Fast Adaptation, enabling the LMA to dynamically adapt the HAMHA architecture for new tasks.
+- Unit tests for the end-to-end Meta-NAS adaptation process in `tests/test_lma_nas.py`.
+- A demonstration of the Meta-NAS feature in `main.py`, which showcases the architecture changing in response to a simulated new task.
+- A new visualization utility in `utils/visualization.py` (`plot_hexagonal_grid`) to plot the hexagonal grid of the HAMHA model.
+
+### Fixed
+- Resolved a `NameError` in `lma/protocols.py` by ensuring necessary imports for type hints (`TaskEncoder`, `MetaNASController`) were present.
+
 ## [Unreleased]
 
 ### Planned

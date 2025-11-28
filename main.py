@@ -1,5 +1,4 @@
 import torch
-import torch
 from hamha.core import HexagonalMultiHeadAttention
 from lma.architect import LeadMetaArchitect
 from utils.visualization import plot_hexagonal_grid
