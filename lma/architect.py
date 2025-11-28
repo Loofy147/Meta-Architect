@@ -12,6 +12,7 @@ from lma.meta_nas import MetaNASController
 from hamha.topology import HexCoordinate
 from typing import Dict, List, Optional
 import numpy as np
+import torch
 
 
 class LeadMetaArchitect:
@@ -21,11 +22,7 @@ class LeadMetaArchitect:
     Implements perceptive omniscience and prescriptive agency over HAMHA.
     """
 
-    def __init__(
-        self,
-        hamha_model: HexagonalMultiHeadAttention,
-        enable_meta_nas: bool = True
-    ):
+    def __init__(self, hamha_model: HexagonalMultiHeadAttention, enable_meta_nas: bool = False):
         self.model = hamha_model
         self.enable_meta_nas = enable_meta_nas
 
@@ -36,20 +33,16 @@ class LeadMetaArchitect:
         self.adp = ArchitecturalDynamicsPredictor()
         self.evolutionary = EvolutionaryModules()
 
-        # Initialize Meta-NAS components if enabled
-        if enable_meta_nas:
-            self.task_encoder = TaskEncoder(d_in=hamha_model.d_model, embedding_dim=64)
+        if self.enable_meta_nas:
+            self.task_encoder = TaskEncoder(d_in=self.model.d_model, embedding_dim=64)
             self.meta_nas_controller = MetaNASController(task_embedding_dim=64)
             self.protocols = EmergencyProtocols(
-                hamha_model,
-                self.task_encoder,
-                self.meta_nas_controller
+                hamha_model, self.task_encoder, self.meta_nas_controller
             )
         else:
             self.task_encoder = None
             self.meta_nas_controller = None
-            # Use simplified protocols without Meta-NAS
-            self.protocols = EmergencyProtocols(hamha_model, None, None)
+            self.protocols = EmergencyProtocols(hamha_model)
 
         # Monitoring state
         self.monitoring_sectors: Dict[str, Dict] = {}
@@ -194,24 +187,19 @@ class LeadMetaArchitect:
         head_idx = self.model.coord_to_idx[coord]
         return self.protocols.reset_head_projections(head_idx, strategy)
 
-    def command_adapt_architecture(self, sample_data):
+    def command_adapt_architecture(self, sample_data: torch.Tensor):
         """LMA Command: Trigger Meta-NAS architecture adaptation."""
         if not self.enable_meta_nas:
-            return "Meta-NAS is not enabled. Initialize LMA with enable_meta_nas=True"
+            return "Meta-NAS is not enabled."
 
         new_model, new_arch = self.protocols.adapt_architecture(sample_data)
 
         if new_model is None:
             return "ADAPT_ARCHITECTURE failed. See logs for details."
 
-        # Update the main model reference
         self.model = new_model
-
-        # Re-initialize telemetry with the new model to ensure consistency
         self.telemetry = TelemetryCollector(self.model)
-
-        # Also update the protocols' internal model reference
-        self.protocols.model = new_model
+        self.protocols.model = self.model
 
         return f"ADAPT_ARCHITECTURE complete. New architecture: {new_arch}"
 

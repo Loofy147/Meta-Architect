@@ -12,17 +12,9 @@ class EmergencyProtocols:
     def __init__(
         self,
         hamha_model: HexagonalMultiHeadAttention,
-        task_encoder: Optional = None,
-        meta_nas_controller: Optional = None
+        task_encoder: Optional[TaskEncoder] = None,
+        meta_nas_controller: Optional[MetaNASController] = None,
     ):
-        """
-        Initialize emergency protocols.
-
-        Args:
-            hamha_model: The HAMHA model to monitor
-            task_encoder: Optional TaskEncoder for Meta-NAS
-            meta_nas_controller: Optional MetaNASController for architecture adaptation
-        """
         self.model = hamha_model
         self.task_encoder = task_encoder
         self.meta_nas_controller = meta_nas_controller
@@ -127,11 +119,8 @@ class EmergencyProtocols:
             A tuple containing the new HAMHA model instance and the new architecture dict,
             or (None, None) on failure.
         """
-        if not self.meta_nas_enabled:
-            print("Meta-NAS not enabled.")
+        if not self.task_encoder or not self.meta_nas_controller:
             return None, None
-
-        from lma.search_space import is_valid_architecture
 
         # 1. Encode the task description into an embedding
         task_embedding = self.task_encoder(sample_data)
@@ -141,13 +130,6 @@ class EmergencyProtocols:
 
         # 3. Validate the new architecture
         if not is_valid_architecture(new_arch):
-            self.protocol_history.append(
-                {
-                    "protocol": "ADAPT_ARCHITECTURE_FAILED",
-                    "reason": "Invalid architecture generated",
-                    "timestamp": time.time(),
-                }
-            )
             return None, None
 
         # 4. Create a new HAMHA model instance

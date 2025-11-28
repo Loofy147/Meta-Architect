@@ -47,6 +47,7 @@ class TelemetryCollector:
         self.model = hamha_model
         self.history: List[TelemetrySnapshot] = []
         self.current_step = 0
+        self.is_spectral = hamha_model.use_spectral
 
         # Detect if model uses spectral attention
         self.is_spectral = hamha_model.use_spectral
@@ -56,10 +57,8 @@ class TelemetryCollector:
         snapshot = TelemetrySnapshot(step=self.current_step, timestamp=time.time())
 
         if self.is_spectral:
-            # Spectral attention telemetry
             self._collect_spectral_telemetry(snapshot)
         else:
-            # Standard HAMHA telemetry
             self._collect_standard_telemetry(snapshot)
 
         self.history.append(snapshot)
@@ -67,7 +66,6 @@ class TelemetryCollector:
         return snapshot
 
     def _collect_standard_telemetry(self, snapshot: TelemetrySnapshot):
-        """Collect telemetry for standard (non-spectral) HAMHA."""
         # Spectral analysis
         for i, head in enumerate(self.model.heads):
             coord = head.coord
@@ -123,15 +121,13 @@ class TelemetryCollector:
                     snapshot.alerts.append(f"DRIFT: {coord} H={entropy:.3f}")
 
     def _collect_spectral_telemetry(self, snapshot: TelemetrySnapshot):
-        """Collect telemetry for spectral HAMHA."""
-        # For spectral attention, we analyze the spectral layer weights
         spectral_layer = self.model.spectral_attention
-
-        # Analyze Q, K, V projection matrices
-        for name, layer in [("Q", spectral_layer.W_Q),
-                           ("K", spectral_layer.W_K),
-                           ("V", spectral_layer.W_V)]:
-            if hasattr(layer, 'weight'):
+        for name, layer in [
+            ("Q", spectral_layer.W_Q),
+            ("K", spectral_layer.W_K),
+            ("V", spectral_layer.W_V),
+        ]:
+            if hasattr(layer, "weight"):
                 W = layer.weight
                 U, S, Vh = torch.linalg.svd(W, full_matrices=False)
                 kappa = S.max() / (S.min() + 1e-8)
@@ -141,42 +137,3 @@ class TelemetryCollector:
 
                 if kappa > 100:
                     snapshot.alerts.append(f"RANK_COLLAPSE: {key} κ={kappa:.2f}")
-
-        # Gradient norms for spectral layer
-        if spectral_layer.W_Q.weight.grad is not None:
-            grad_norm = torch.norm(spectral_layer.W_Q.weight.grad).item()
-            snapshot.gradient_norms["Spectral_Q"] = grad_norm
-
-            if grad_norm < 1e-6:
-                snapshot.alerts.append("VANISHING_GRADIENT: Spectral_Q")
-            elif grad_norm > 1e3:
-                snapshot.alerts.append("EXPLODING_GRADIENT: Spectral_Q")
-
-        # For spectral attention, we can analyze filter responses
-        for head_idx, filter in enumerate(spectral_layer.filters):
-            # Get filter response
-            filter_response = filter(spectral_layer.eigenvalues)
-            avg_response = filter_response.mean().item()
-
-            # Use filter response as a proxy for "attention entropy"
-            # High variance = diverse filtering, low variance = fixation
-            response_std = filter_response.std().item()
-
-            coord_str = f"SpectralHead_{head_idx}"
-            snapshot.attention_entropy[coord_str] = response_std
-
-            # Compute derivative if history exists
-            if len(self.history) > 0:
-                prev_entropy = self.history[-1].attention_entropy.get(
-                    coord_str, response_std
-                )
-                snapshot.entropy_derivatives[coord_str] = response_std - prev_entropy
-
-            # Alerts based on filter diversity
-            if response_std < 0.1:
-                snapshot.alerts.append(f"FIXATION: {coord_str} σ={response_std:.3f}")
-            elif (
-                response_std < 0.3
-                and snapshot.entropy_derivatives.get(coord_str, 0) < 0
-            ):
-                snapshot.alerts.append(f"DRIFT: {coord_str} σ={response_std:.3f}")
