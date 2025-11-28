@@ -45,11 +45,22 @@ class TelemetryCollector:
         self.model = hamha_model
         self.history: List[TelemetrySnapshot] = []
         self.current_step = 0
+        self.is_spectral = hamha_model.use_spectral
 
     def collect(self) -> TelemetrySnapshot:
         """Collect current telemetry snapshot."""
         snapshot = TelemetrySnapshot(step=self.current_step, timestamp=time.time())
 
+        if self.is_spectral:
+            self._collect_spectral_telemetry(snapshot)
+        else:
+            self._collect_standard_telemetry(snapshot)
+
+        self.history.append(snapshot)
+        self.current_step += 1
+        return snapshot
+
+    def _collect_standard_telemetry(self, snapshot: TelemetrySnapshot):
         # Spectral analysis
         for i, head in enumerate(self.model.heads):
             coord = head.coord
@@ -100,6 +111,20 @@ class TelemetryCollector:
                 ):
                     snapshot.alerts.append(f"DRIFT: {coord} H={entropy:.3f}")
 
-        self.history.append(snapshot)
-        self.current_step += 1
-        return snapshot
+    def _collect_spectral_telemetry(self, snapshot: TelemetrySnapshot):
+        spectral_layer = self.model.spectral_attention
+        for name, layer in [
+            ("Q", spectral_layer.W_Q),
+            ("K", spectral_layer.W_K),
+            ("V", spectral_layer.W_V),
+        ]:
+            if hasattr(layer, "weight"):
+                W = layer.weight
+                U, S, Vh = torch.linalg.svd(W, full_matrices=False)
+                kappa = S.max() / (S.min() + 1e-8)
+                key = f"Spectral_{name}"
+                snapshot.condition_numbers[key] = kappa.item()
+                snapshot.min_singular_values[key] = S.min().item()
+
+                if kappa > 100:
+                    snapshot.alerts.append(f"RANK_COLLAPSE: {key} κ={kappa:.2f}")

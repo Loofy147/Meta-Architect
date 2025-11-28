@@ -1,6 +1,6 @@
 import torch
 import time
-from typing import List, Dict
+from typing import List, Dict, Optional
 from hamha.core import HexagonalMultiHeadAttention
 from lma.task_encoder import TaskEncoder
 from lma.meta_nas import MetaNASController
@@ -10,7 +10,12 @@ from lma.search_space import is_valid_architecture
 class EmergencyProtocols:
     """Emergency response protocols for system degradation."""
 
-    def __init__(self, hamha_model: HexagonalMultiHeadAttention, task_encoder: TaskEncoder, meta_nas_controller: MetaNASController):
+    def __init__(
+        self,
+        hamha_model: HexagonalMultiHeadAttention,
+        task_encoder: Optional[TaskEncoder] = None,
+        meta_nas_controller: Optional[MetaNASController] = None,
+    ):
         self.model = hamha_model
         self.task_encoder = task_encoder
         self.meta_nas_controller = meta_nas_controller
@@ -92,20 +97,33 @@ class EmergencyProtocols:
 
     def adapt_architecture(self, sample_data: torch.Tensor):
         """
-        Adapt the HAMHA architecture for a new task using Meta-NAS.
+        Generates a new HAMHA architecture for a new task using Meta-NAS.
+
+        Args:
+            sample_data: Sample batch of data from the new task
+
+        Returns:
+            A tuple containing the new HAMHA model instance and the new architecture dict,
+            or (None, None) on failure.
         """
-        # 1. Encode the task description into an embedding.
+        if not self.task_encoder or not self.meta_nas_controller:
+            return None, None
+
+        # 1. Encode the task description into an embedding
         task_embedding = self.task_encoder(sample_data)
 
-        # 2. Using the Meta-NAS controller to generate a new architecture.
+        # 2. Use Meta-NAS controller to generate new architecture
         new_arch = self.meta_nas_controller(task_embedding)
 
-        # 3. Validate the new architecture for robustness.
+        # 3. Validate the new architecture
         if not is_valid_architecture(new_arch):
-            raise ValueError("Meta-NAS controller generated an invalid architecture.")
+            return None, None
 
-        # 4. Re-initializing the HAMHA model with the new architecture.
-        self.model = HexagonalMultiHeadAttention(d_model=self.model.d_model, **new_arch)
+        # 4. Create a new HAMHA model instance
+        new_model = HexagonalMultiHeadAttention(
+            d_model=self.model.d_model,
+            **new_arch
+        )
 
         self.protocol_history.append(
             {
@@ -114,4 +132,5 @@ class EmergencyProtocols:
                 "timestamp": time.time(),
             }
         )
-        return f"ADAPT_ARCHITECTURE protocol complete. New architecture: {new_arch}"
+
+        return new_model, new_arch

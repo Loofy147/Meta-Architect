@@ -5,9 +5,12 @@ from lma.hge import HypothesisGenerationEngine
 from lma.adp import ArchitecturalDynamicsPredictor
 from lma.protocols import EmergencyProtocols
 from lma.evolutionary import EvolutionaryModules
+from lma.task_encoder import TaskEncoder
+from lma.meta_nas import MetaNASController
 from hamha.topology import HexCoordinate
 from typing import Dict, List
 import numpy as np
+import torch
 
 
 class LeadMetaArchitect:
@@ -17,16 +20,27 @@ class LeadMetaArchitect:
     Implements perceptive omniscience and prescriptive agency over HAMHA.
     """
 
-    def __init__(self, hamha_model: HexagonalMultiHeadAttention):
+    def __init__(self, hamha_model: HexagonalMultiHeadAttention, enable_meta_nas: bool = False):
         self.model = hamha_model
+        self.enable_meta_nas = enable_meta_nas
 
         # Core subsystems
         self.telemetry = TelemetryCollector(hamha_model)
         self.cmcg = CrossModalCausalGraph()
         self.hge = HypothesisGenerationEngine(self.cmcg)
         self.adp = ArchitecturalDynamicsPredictor()
-        self.protocols = EmergencyProtocols(hamha_model)
         self.evolutionary = EvolutionaryModules()
+
+        if self.enable_meta_nas:
+            self.task_encoder = TaskEncoder(d_in=self.model.d_model, embedding_dim=64)
+            self.meta_nas_controller = MetaNASController(task_embedding_dim=64)
+            self.protocols = EmergencyProtocols(
+                hamha_model, self.task_encoder, self.meta_nas_controller
+            )
+        else:
+            self.task_encoder = None
+            self.meta_nas_controller = None
+            self.protocols = EmergencyProtocols(hamha_model)
 
         # Monitoring state
         self.monitoring_sectors: Dict[str, Dict] = {}
@@ -170,6 +184,22 @@ class LeadMetaArchitect:
         """LMA Command: Reset specific head projections."""
         head_idx = self.model.coord_to_idx[coord]
         return self.protocols.reset_head_projections(head_idx, strategy)
+
+    def command_adapt_architecture(self, sample_data: torch.Tensor):
+        """LMA Command: Trigger Meta-NAS architecture adaptation."""
+        if not self.enable_meta_nas:
+            return "Meta-NAS is not enabled."
+
+        new_model, new_arch = self.protocols.adapt_architecture(sample_data)
+
+        if new_model is None:
+            return "ADAPT_ARCHITECTURE failed. See logs for details."
+
+        self.model = new_model
+        self.telemetry = TelemetryCollector(self.model)
+        self.protocols.model = self.model
+
+        return f"ADAPT_ARCHITECTURE complete. New architecture: {new_arch}"
 
     def generate_report(self) -> str:
         """Generate detailed LMA report."""
