@@ -303,6 +303,11 @@ viz.plot_computational_profile()
 
 # Plot gradient flow
 viz.plot_gradient_flow()
+
+# Plot the hexagonal grid architecture
+from utils.visualization import plot_hexagonal_grid
+fig = plot_hexagonal_grid(lma.model, "HAMHA Architecture")
+fig.savefig("original_architecture.png")
 ```
 
 ---
@@ -499,7 +504,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 ### Roadmap
 
 - [x] **v1.0**: Spectral Attention implemented
-- [ ] **v1.1**: Meta-NAS with Fast Adaptation (in progress)
+- [x] **v1.1**: Meta-NAS with Fast Adaptation
 - [ ] **v1.2**: Causal Structure Learning
 - [ ] **v1.3**: Adaptive Complexity
 - [ ] **v2.0**: Production Hardening and Multi-GPU support
