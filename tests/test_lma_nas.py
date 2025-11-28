@@ -40,10 +40,9 @@ class TestMetaNAS:
         protocols = EmergencyProtocols(hamha_model, task_encoder, meta_nas_controller)
 
         sample_data = torch.randn(10, 20, 128)
-        result = protocols.adapt_architecture(sample_data)
+        new_model, new_arch = protocols.adapt_architecture(sample_data)
 
-        assert "ADAPT_ARCHITECTURE protocol complete" in result
-        assert isinstance(protocols.model, HexagonalMultiHeadAttention)
-        # Check if the new model's parameters are from the search space
-        new_arch = protocols.protocol_history[-1]["new_architecture"]
+        assert new_model is not None
+        assert new_arch is not None
+        assert isinstance(new_model, HexagonalMultiHeadAttention)
         assert is_valid_architecture(new_arch)
