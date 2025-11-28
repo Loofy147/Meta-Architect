@@ -1,20 +1,36 @@
+# FILE: lma/protocols.py (FIXED VERSION)
+
 import torch
 import time
-from typing import List, Dict
+from typing import List, Dict, Optional
 from hamha.core import HexagonalMultiHeadAttention
-from lma.task_encoder import TaskEncoder
-from lma.meta_nas import MetaNASController
-from lma.search_space import is_valid_architecture
 
 
 class EmergencyProtocols:
     """Emergency response protocols for system degradation."""
 
-    def __init__(self, hamha_model: HexagonalMultiHeadAttention, task_encoder: TaskEncoder, meta_nas_controller: MetaNASController):
+    def __init__(
+        self,
+        hamha_model: HexagonalMultiHeadAttention,
+        task_encoder: Optional = None,
+        meta_nas_controller: Optional = None
+    ):
+        """
+        Initialize emergency protocols.
+
+        Args:
+            hamha_model: The HAMHA model to monitor
+            task_encoder: Optional TaskEncoder for Meta-NAS
+            meta_nas_controller: Optional MetaNASController for architecture adaptation
+        """
         self.model = hamha_model
         self.task_encoder = task_encoder
         self.meta_nas_controller = meta_nas_controller
         self.protocol_history: List[Dict] = []
+
+        # Check if Meta-NAS is available
+        self.meta_nas_enabled = (task_encoder is not None and
+                                 meta_nas_controller is not None)
 
     def trigger_aap_ad_phase1(
         self, target_head_idx: int, entropy_reg_increment: float = 0.01
@@ -22,14 +38,16 @@ class EmergencyProtocols:
         """Attention Diversity Protocol - Phase 1: Soft Intervention."""
         self.model.entropy_reg += entropy_reg_increment
 
-        # Decay self-mixing coefficient
-        self.model.gnn_mixing.lambda_self.data[target_head_idx] *= 0.95
+        # Only apply GNN mixing adjustments if not using spectral attention
+        if not self.model.use_spectral and hasattr(self.model, 'gnn_mixing'):
+            # Decay self-mixing coefficient
+            self.model.gnn_mixing.lambda_self.data[target_head_idx] *= 0.95
 
-        # Boost neighbor influence
-        adj = self.model.gnn_mixing.adjacency
-        for j in range(self.model.num_heads):
-            if adj[target_head_idx, j] > 0:
-                self.model.gnn_mixing.g_ij.data[target_head_idx, j] *= 1.05
+            # Boost neighbor influence
+            adj = self.model.gnn_mixing.adjacency_dense
+            for j in range(self.model.num_heads):
+                if adj[target_head_idx, j] > 0:
+                    self.model.gnn_mixing.g_ij.data[target_head_idx, j] *= 1.05
 
         self.protocol_history.append(
             {
@@ -44,6 +62,10 @@ class EmergencyProtocols:
 
     def trigger_aap_ad_phase2(self, target_head_idx: int):
         """Attention Diversity Protocol - Phase 2: Hard Intervention."""
+        # Only works with non-spectral HAMHA
+        if self.model.use_spectral:
+            return "AAP_AD_PHASE2 not applicable for spectral attention"
+
         head = self.model.heads[target_head_idx]
 
         # Add random perturbation to projection matrices
@@ -67,6 +89,10 @@ class EmergencyProtocols:
         self, target_head_idx: int, strategy: str = "orthogonal"
     ):
         """Reset projection matrices for a head."""
+        # Only works with non-spectral HAMHA
+        if self.model.use_spectral:
+            return "Head reset not applicable for spectral attention"
+
         head = self.model.heads[target_head_idx]
 
         with torch.no_grad():
@@ -92,20 +118,43 @@ class EmergencyProtocols:
 
     def adapt_architecture(self, sample_data: torch.Tensor):
         """
-        Adapt the HAMHA architecture for a new task using Meta-NAS.
+        Generates a new HAMHA architecture for a new task using Meta-NAS.
+
+        Args:
+            sample_data: Sample batch of data from the new task
+
+        Returns:
+            A tuple containing the new HAMHA model instance and the new architecture dict,
+            or (None, None) on failure.
         """
-        # 1. Encode the task description into an embedding.
+        if not self.meta_nas_enabled:
+            print("Meta-NAS not enabled.")
+            return None, None
+
+        from lma.search_space import is_valid_architecture
+
+        # 1. Encode the task description into an embedding
         task_embedding = self.task_encoder(sample_data)
 
-        # 2. Using the Meta-NAS controller to generate a new architecture.
+        # 2. Use Meta-NAS controller to generate new architecture
         new_arch = self.meta_nas_controller(task_embedding)
 
-        # 3. Validate the new architecture for robustness.
+        # 3. Validate the new architecture
         if not is_valid_architecture(new_arch):
-            raise ValueError("Meta-NAS controller generated an invalid architecture.")
+            self.protocol_history.append(
+                {
+                    "protocol": "ADAPT_ARCHITECTURE_FAILED",
+                    "reason": "Invalid architecture generated",
+                    "timestamp": time.time(),
+                }
+            )
+            return None, None
 
-        # 4. Re-initializing the HAMHA model with the new architecture.
-        self.model = HexagonalMultiHeadAttention(d_model=self.model.d_model, **new_arch)
+        # 4. Create a new HAMHA model instance
+        new_model = HexagonalMultiHeadAttention(
+            d_model=self.model.d_model,
+            **new_arch
+        )
 
         self.protocol_history.append(
             {
@@ -114,4 +163,5 @@ class EmergencyProtocols:
                 "timestamp": time.time(),
             }
         )
-        return f"ADAPT_ARCHITECTURE protocol complete. New architecture: {new_arch}"
+
+        return new_model, new_arch
