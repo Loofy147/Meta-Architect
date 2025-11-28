@@ -46,3 +46,27 @@ class TestMetaNAS:
         assert new_arch is not None
         assert isinstance(new_model, HexagonalMultiHeadAttention)
         assert is_valid_architecture(new_arch)
+
+    def test_lma_command_adapt_architecture(self):
+        """Test the LMA's command_adapt_architecture functionality."""
+        from lma.architect import LeadMetaArchitect
+
+        # Initial model
+        hamha_model = HexagonalMultiHeadAttention(d_model=128, grid_radius=1)
+        lma = LeadMetaArchitect(hamha_model, enable_meta_nas=True)
+
+        # Ensure the initial model is set
+        original_model_id = id(lma.model)
+        original_num_heads = lma.model.num_heads
+
+        # Run the adaptation command
+        sample_data = torch.randn(10, 20, 128)
+        result = lma.command_adapt_architecture(sample_data)
+
+        # Verify the model has been replaced
+        assert id(lma.model) != original_model_id
+        assert "ADAPT_ARCHITECTURE complete" in result
+
+        # Verify that telemetry and protocols are updated with the new model
+        assert id(lma.telemetry.model) == id(lma.model)
+        assert id(lma.protocols.model) == id(lma.model)

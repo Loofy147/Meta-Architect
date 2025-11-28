@@ -4,6 +4,9 @@ import torch
 import time
 from typing import List, Dict, Optional
 from hamha.core import HexagonalMultiHeadAttention
+from lma.search_space import is_valid_architecture
+from lma.task_encoder import TaskEncoder
+from lma.meta_nas import MetaNASController
 
 
 class EmergencyProtocols:

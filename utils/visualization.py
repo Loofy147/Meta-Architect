@@ -47,6 +47,48 @@ class TelemetryVisualizer:
         plt.tight_layout()
         return fig
 
+
+def plot_hexagonal_grid(hamha_model, title: str):
+    """
+    Visualizes the hexagonal grid of a HAMHA model.
+    """
+    coords = hamha_model.grid_coords
+    q_coords = [c.q for c in coords]
+    r_coords = [c.r for c in coords]
+
+    # Convert axial to cube coordinates for plotting
+    x = [c.q for c in coords]
+    z = [c.r for c in coords]
+    y = [-q - r for q, r in zip(x, z)]
+
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    # Plot the heads
+    ax.scatter(x, y, z, s=500, c="skyblue", depthshade=False)
+
+    # Label the heads
+    for i, c in enumerate(coords):
+        ax.text(c.q, -c.q - c.r, c.r + 0.1, f"H({c.q},{c.r})",
+                ha='center', va='bottom', fontsize=8)
+
+    # Set plot properties
+    ax.set_title(title, fontsize=16)
+    ax.set_xlabel("Q")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("R")
+
+    # Hide the grid planes
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+
+    # Set aspect ratio to equal
+    ax.set_box_aspect([np.ptp(i) if np.ptp(i) > 0 else 1 for i in [x, y, z]])
+
+    plt.tight_layout()
+    return fig
+
     def plot_condition_numbers(self):
         """Plot condition number evolution."""
         fig, ax = plt.subplots(figsize=(12, 6))
