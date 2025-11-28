@@ -167,6 +167,11 @@ Where `j ∈ Neighbors(i)` in the hexagonal graph.
 - AAP_AD Phase 2: Hard intervention (projection perturbation)
 - Head reset protocols
 
+#### **Meta-NAS Controller**
+- **TaskEncoder**: Generates task embeddings from sample data.
+- **MetaNASController**: Selects optimal architectures from a defined search space.
+- **`adapt_architecture` protocol**: Orchestrates the Meta-NAS pipeline.
+
 #### **Evolutionary Modules**
 - **GNN_OPT**: Optimize mixing layer efficiency
 - **ADAPT_BIAS**: Dynamic coordinate bias adaptation
@@ -193,7 +198,21 @@ Where `j ∈ Neighbors(i)` in the hexagonal graph.
 
 ## 🔬 Advanced Features
 
-### 1. Autonomous Intervention
+### 1. Spectral Attention
+
+HAMHA now supports **Spectral Attention**, a mechanism that operates in the frequency domain of the graph. This allows for efficient long-range information propagation and provides a new way to analyze the model's behavior.
+
+To use Spectral Attention, set `use_spectral=True` when initializing the `HexagonalMultiHeadAttention` module:
+
+```python
+hamha = HexagonalMultiHeadAttention(
+    d_model=512,
+    grid_radius=2,
+    use_spectral=True
+)
+```
+
+### 2. Autonomous Intervention
 
 When the LMA detects entropy drift:
 
@@ -396,7 +415,8 @@ class HexagonalMultiHeadAttention(nn.Module):
         d_model: int,           # Model dimension
         grid_radius: int = 2,   # Hexagonal grid radius
         d_head: int = 64,       # Head dimension
-        use_hypernet: bool = False  # Use HyperNetwork projections
+        use_hypernet: bool = False,  # Use HyperNetwork projections
+        use_spectral: bool = False, # Use Spectral Attention
     )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -454,11 +474,11 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ### Roadmap
 
-- [ ] **v1.1**: Extended grid topologies (triangular, square)
-- [ ] **v1.2**: Multi-GPU distributed LMA
-- [ ] **v1.3**: Reinforcement learning-based LMA optimization
-- [ ] **v2.0**: Meta-evolution (dynamic architecture modification)
-- [ ] **v2.1**: Real-time feedback from external environments
+- [x] **v1.0**: Spectral Attention implemented
+- [ ] **v1.1**: Meta-NAS with Fast Adaptation (in progress)
+- [ ] **v1.2**: Causal Structure Learning
+- [ ] **v1.3**: Adaptive Complexity
+- [ ] **v2.0**: Production Hardening and Multi-GPU support
 
 ---
 
