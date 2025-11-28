@@ -2,13 +2,18 @@ import torch
 import time
 from typing import List, Dict
 from hamha.core import HexagonalMultiHeadAttention
+from lma.task_encoder import TaskEncoder
+from lma.meta_nas import MetaNASController
+from lma.search_space import is_valid_architecture
 
 
 class EmergencyProtocols:
     """Emergency response protocols for system degradation."""
 
-    def __init__(self, hamha_model: HexagonalMultiHeadAttention):
+    def __init__(self, hamha_model: HexagonalMultiHeadAttention, task_encoder: TaskEncoder, meta_nas_controller: MetaNASController):
         self.model = hamha_model
+        self.task_encoder = task_encoder
+        self.meta_nas_controller = meta_nas_controller
         self.protocol_history: List[Dict] = []
 
     def trigger_aap_ad_phase1(
@@ -84,3 +89,29 @@ class EmergencyProtocols:
         )
 
         return f"Projections reset for head {target_head_idx} using {strategy}"
+
+    def adapt_architecture(self, sample_data: torch.Tensor):
+        """
+        Adapt the HAMHA architecture for a new task using Meta-NAS.
+        """
+        # 1. Encode the task description into an embedding.
+        task_embedding = self.task_encoder(sample_data)
+
+        # 2. Using the Meta-NAS controller to generate a new architecture.
+        new_arch = self.meta_nas_controller(task_embedding)
+
+        # 3. Validate the new architecture for robustness.
+        if not is_valid_architecture(new_arch):
+            raise ValueError("Meta-NAS controller generated an invalid architecture.")
+
+        # 4. Re-initializing the HAMHA model with the new architecture.
+        self.model = HexagonalMultiHeadAttention(d_model=self.model.d_model, **new_arch)
+
+        self.protocol_history.append(
+            {
+                "protocol": "ADAPT_ARCHITECTURE",
+                "new_architecture": new_arch,
+                "timestamp": time.time(),
+            }
+        )
+        return f"ADAPT_ARCHITECTURE protocol complete. New architecture: {new_arch}"
