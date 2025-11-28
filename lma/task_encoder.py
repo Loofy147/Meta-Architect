@@ -15,23 +15,27 @@ class TaskEncoder(nn.Module):
 
     ### Forward Pass:
 
-    -   `task_description`: A dictionary or object containing information about the task.
-        (e.g., sample inputs, loss function, performance metrics).
+    -   `sample_data`: A sample batch of data from the task.
 
     ### Returns:
 
     -   A tensor representing the task embedding.
     """
-    def __init__(self, embedding_dim: int = 64):
+    def __init__(self, d_in: int, embedding_dim: int = 64):
         super().__init__()
+        self.d_in = d_in
         self.embedding_dim = embedding_dim
-        # Placeholder for the actual implementation
-        self.placeholder = nn.Linear(1, embedding_dim)
+        self.encoder = nn.Sequential(
+            nn.Linear(d_in, 128),
+            nn.ReLU(),
+            nn.Linear(128, embedding_dim),
+        )
 
-    def forward(self, task_description: dict) -> torch.Tensor:
+    def forward(self, sample_data: torch.Tensor) -> torch.Tensor:
         """
-        Generates a task embedding from a task description.
+        Generates a task embedding from a sample of task data.
         """
-        # This is a placeholder implementation
-        dummy_input = torch.randn(1, 1)
-        return self.placeholder(dummy_input)
+        # For now, we'll use the mean of the sample data as the input to the encoder.
+        # This is a simple way to get a representation of the data's distribution.
+        task_representation = sample_data.mean(dim=0).mean(dim=0)
+        return self.encoder(task_representation)
