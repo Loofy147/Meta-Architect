@@ -2,12 +2,15 @@
 
 import torch
 import time
+import logging
 from typing import List, Dict, Optional
 from hamha.core import HexagonalMultiHeadAttention
 from lma.search_space import is_valid_architecture
 from lma.task_encoder import TaskEncoder
 from lma.meta_nas import MetaNASController
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class EmergencyProtocols:
     """Emergency response protocols for system degradation."""
@@ -141,6 +144,9 @@ class EmergencyProtocols:
             **new_arch
         )
 
+        # 5. Transfer weights from the old model to the new one
+        self._transfer_weights(self.model, new_model)
+
         self.protocol_history.append(
             {
                 "protocol": "ADAPT_ARCHITECTURE",
@@ -150,3 +156,82 @@ class EmergencyProtocols:
         )
 
         return new_model, new_arch
+
+    def _transfer_weights(self, old_model: HexagonalMultiHeadAttention, new_model: HexagonalMultiHeadAttention):
+        """
+        Transfers weights from an old model to a new, potentially different, architecture.
+        This preserves learned knowledge for overlapping parts of the architecture.
+        """
+        logger.info("Initiating weight transfer between HAMHA models...")
+
+        # 0. Direct copy of simple attributes
+        new_model.entropy_reg = old_model.entropy_reg
+
+        # 1. Create a coordinate-to-head mapping for the old model for efficient lookup
+        old_model_coord_map = {
+            head.coord: head for head in getattr(old_model, 'heads', [])
+        }
+
+        # 2. Identify overlapping and new head coordinates
+        old_coords = set(old_model.coord_to_idx.keys())
+        new_coords = set(new_model.coord_to_idx.keys())
+        overlapping_coords = old_coords.intersection(new_coords)
+
+        if not overlapping_coords:
+            logger.warning("No overlapping coordinates found. New model will have random initialization.")
+            return
+
+        logger.info(f"Found {len(overlapping_coords)} overlapping heads to transfer.")
+
+        # 3. Transfer weights based on mode (spectral vs. non-spectral)
+        if new_model.use_spectral and old_model.use_spectral:
+            old_sa = old_model.spectral_attention
+            new_sa = new_model.spectral_attention
+            for coord in overlapping_coords:
+                old_idx = old_model.coord_to_idx[coord]
+                new_idx = new_model.coord_to_idx[coord]
+                new_sa.filters[new_idx].load_state_dict(old_sa.filters[old_idx].state_dict())
+            logger.info("Transferred spectral filters.")
+
+        elif not new_model.use_spectral and not old_model.use_spectral:
+            use_hypernet_old = getattr(old_model, 'hypernet', None) is not None
+            use_hypernet_new = getattr(new_model, 'hypernet', None) is not None
+            if old_model.d_head == new_model.d_head and use_hypernet_old == use_hypernet_new:
+                for coord in overlapping_coords:
+                    if coord in old_model_coord_map:
+                        old_head = old_model_coord_map[coord]
+                        new_head = new_model.heads[new_model.coord_to_idx[coord]]
+                        new_head.load_state_dict(old_head.state_dict())
+                logger.info("Transferred standard attention heads.")
+
+                if hasattr(old_model, 'gnn_mixing') and hasattr(new_model, 'gnn_mixing'):
+                    new_model.gnn_mixing.W_self.data.copy_(old_model.gnn_mixing.W_self.data)
+                    new_model.gnn_mixing.W_neighbor.data.copy_(old_model.gnn_mixing.W_neighbor.data)
+                    logger.info("Transferred GNN mixing weights.")
+                    with torch.no_grad():
+                        for coord in overlapping_coords:
+                            old_idx = old_model.coord_to_idx[coord]
+                            new_idx = new_model.coord_to_idx[coord]
+                            new_model.gnn_mixing.lambda_self.data[new_idx] = old_model.gnn_mixing.lambda_self.data[old_idx]
+                            for other_coord in overlapping_coords:
+                                old_j = old_model.coord_to_idx[other_coord]
+                                new_j = new_model.coord_to_idx[other_coord]
+                                new_model.gnn_mixing.g_ij.data[new_idx, new_j] = old_model.gnn_mixing.g_ij.data[old_idx, old_j]
+                    logger.info("Transferred GNN mixing parameters.")
+            else:
+                logger.warning(f"WARNING: d_head or hypernet configuration has changed. Cannot transfer attention head weights.")
+
+        # 4. Transfer the final projection layer (W_O) by slicing
+        with torch.no_grad():
+            if old_model.d_head == new_model.d_head:
+                d_head = new_model.d_head
+                for coord in overlapping_coords:
+                    old_idx = old_model.coord_to_idx[coord]
+                    new_idx = new_model.coord_to_idx[coord]
+                    old_slice = old_model.W_O[old_idx * d_head : (old_idx + 1) * d_head, :]
+                    new_model.W_O.data[new_idx * d_head : (new_idx + 1) * d_head, :] = old_slice.clone()
+                logger.info("Transferred final projection layer W_O.")
+            else:
+                logger.warning("d_head differs. Cannot transfer W_O. It will be randomly initialized.")
+
+        logger.info("Weight transfer complete.")
