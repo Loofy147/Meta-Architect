@@ -18,13 +18,13 @@ class CoordinateBiasFunction(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, d_model * d_head),
+            nn.Linear(hidden_dim, d_head),
         )
 
     def forward(self, q: int, r: int) -> torch.Tensor:
         coord_tensor = torch.tensor([[float(q), float(r)]], dtype=torch.float32)
         bias_flat = self.coord_embed(coord_tensor)
-        return bias_flat.view(self.d_model, self.d_head)
+        return bias_flat.view(self.d_head)
 
 
 class HyperNetwork(nn.Module):
@@ -76,10 +76,6 @@ class AttentionHead(nn.Module):
         self.W_K_base = nn.Parameter(torch.randn(d_model, d_head) / math.sqrt(d_model))
         self.W_V_base = nn.Parameter(torch.randn(d_model, d_head) / math.sqrt(d_model))
 
-        self.B_Q = nn.Parameter(torch.randn(d_model, d_head) * 0.01)
-        self.B_K = nn.Parameter(torch.randn(d_model, d_head) * 0.01)
-        self.B_V = nn.Parameter(torch.randn(d_model, d_head) * 0.01)
-
         self.bias_function = bias_function
         self.hypernet = hypernet
 
@@ -95,13 +91,9 @@ class AttentionHead(nn.Module):
             W_K = self.hypernet(self.coord.q, self.coord.r, x_global)
             W_V = self.hypernet(self.coord.q, self.coord.r, x_global)
         else:
-            if self.bias_function is not None:
-                f = self.bias_function(self.coord.q, self.coord.r)
-            else:
-                f = torch.zeros(self.d_model, self.d_head)
-            W_Q = (self.W_Q_base + self.B_Q * f).unsqueeze(0)
-            W_K = (self.W_K_base + self.B_K * f).unsqueeze(0)
-            W_V = (self.W_V_base + self.B_V * f).unsqueeze(0)
+            W_Q = self.W_Q_base.unsqueeze(0)
+            W_K = self.W_K_base.unsqueeze(0)
+            W_V = self.W_V_base.unsqueeze(0)
         return W_Q, W_K, W_V
 
     def forward(
@@ -114,6 +106,11 @@ class AttentionHead(nn.Module):
         Q = torch.einsum("bnd,bdh->bnh", x, W_Q)
         K = torch.einsum("bnd,bdh->bnh", x, W_K)
         V = torch.einsum("bnd,bdh->bnh", x, W_V)
+
+        # Apply spatial bias to the value tensor
+        if not self.use_hypernet and self.bias_function is not None:
+            spatial_bias = self.bias_function(self.coord.q, self.coord.r)
+            V = V + spatial_bias.view(1, 1, self.d_head)
 
         scores = torch.einsum("bnh,bmh->bnm", Q, K) / math.sqrt(self.d_head)
 

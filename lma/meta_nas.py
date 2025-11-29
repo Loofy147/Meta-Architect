@@ -1,30 +1,18 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from lma.search_space import SEARCH_SPACE
+from hamha.core import HexagonalMultiHeadAttention
 
 class MetaNASController(nn.Module):
     """
-    ## Meta-Neural Architecture Search (NAS) Controller
-
-    This module learns to generate neural network architectures that are
-    optimized for a specific task. It takes a task embedding as input and
-    outputs a description of a HAMHA architecture.
-
-    The controller is trained using reinforcement learning, where the reward
-    is the performance of the generated architecture on the task.
-
-    ### Forward Pass:
-
-    -   `task_embedding`: A tensor representing the task embedding from the TaskEncoder.
-
-    ### Returns:
-
-    -   An architectural description (e.g., a dictionary of hyperparameters).
+    Meta-learned controller for HAMHA architecture adaptation.
     """
-    def __init__(self, task_embedding_dim: int = 64, hidden_dim: int = 128):
+    def __init__(self, task_embedding_dim: int = 64, hidden_dim: int = 128, meta_lr: float = 1e-3):
         super().__init__()
         self.task_embedding_dim = task_embedding_dim
         self.hidden_dim = hidden_dim
+        self.meta_lr = nn.Parameter(torch.tensor(meta_lr))
 
         self.layers = nn.Sequential(
             nn.Linear(task_embedding_dim, hidden_dim),
@@ -33,30 +21,30 @@ class MetaNASController(nn.Module):
         )
 
     def get_total_search_space_size(self) -> int:
-        """
-        Calculates the total number of output dimensions required to represent the
-        entire search space.
-        """
         return sum(len(v) for v in SEARCH_SPACE.values())
 
-    def forward(self, task_embedding: torch.Tensor) -> dict:
+    def sample_architecture(self, task_embedding: torch.Tensor) -> (dict, torch.Tensor):
         """
-        Generates an architectural description from a task embedding.
-
-        This implementation uses a simple feed-forward network to produce a set of
-        logits for each hyperparameter in the search space. It then
-        deterministically selects the hyperparameter value with the highest logit
-        for each choice.
+        Samples an architecture based on the task embedding using a categorical
+        distribution, returning the architecture and the log probability of the
+        choice.
         """
         logits = self.layers(task_embedding)
-
         arch_params = {}
+        total_log_prob = 0
         current_idx = 0
+
         for key, values in SEARCH_SPACE.items():
             num_values = len(values)
             param_logits = logits[current_idx : current_idx + num_values]
-            chosen_idx = torch.argmax(param_logits).item()
-            arch_params[key] = values[chosen_idx]
+
+            # Create a categorical distribution and sample an action
+            dist = torch.distributions.Categorical(logits=param_logits)
+            action = dist.sample()
+
+            # Store the chosen parameter and its log probability
+            arch_params[key] = values[action.item()]
+            total_log_prob += dist.log_prob(action)
             current_idx += num_values
 
-        return arch_params
+        return arch_params, total_log_prob

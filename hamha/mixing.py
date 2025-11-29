@@ -47,39 +47,37 @@ class GNNMixingLayer(nn.Module):
         Returns:
             List of mixed outputs with same shapes
         """
-        # Stack all heads: [num_heads, batch, seq_len, d_head]
-        stacked = torch.stack(head_outputs, dim=0)
+        # Stack all heads: [batch, num_heads, seq_len, d_head]
+        stacked_heads = torch.stack(head_outputs, dim=1)
 
-        # Self contribution: [num_heads, batch, seq_len, d_head]
-        self_contrib = torch.einsum('hbsd,de->hbse', stacked, self.W_self)
-        self_contrib = self_contrib * self.lambda_self.view(-1, 1, 1, 1)
+        # Self-contribution
+        self_contrib = torch.einsum('bjnd,de->bjne', stacked_heads, self.W_self)
+        self_contrib *= self.lambda_self.view(1, -1, 1, 1)
 
-        # Neighbor aggregation using vectorized ops
-        # [num_heads, batch, seq_len, d_head] @ [d_head, d_head]
-        # -> [num_heads, batch, seq_len, d_head]
-        transformed = torch.einsum('hbsd,de->hbse', stacked, self.W_neighbor)
+        # Neighbor contribution
+        transformed_neighbor = torch.einsum('bjnd,de->bjne', stacked_heads, self.W_neighbor)
 
-        # Apply edge weights and aggregate
-        # g_ij: [num_heads, num_heads] (source, target)
-        # adjacency: [num_heads, num_heads]
-        edge_weights = self.g_ij * self.adjacency_dense
+        # Adjacency-weighted sum
+        # A_ij is adj matrix from j to i, so we need to sum over j
+        adj_and_g = self.adjacency_dense * self.g_ij
 
-        # [target_heads, batch, seq, d_head] =
-        #   [target, source] @ [source, batch, seq, d_head]
-        neighbor_contrib = torch.einsum(
-            'ts,sbde->tbde',
-            edge_weights,
-            transformed
-        )
+        # Reshape for matmul: move the 'j' dimension to the end for contraction
+        # (batch, n_heads_j, seq, d) -> (batch, seq, d, n_heads_j)
+        transformed_neighbor_reshaped = transformed_neighbor.permute(0, 2, 3, 1)
 
-        # Combine and activate
-        mixed = F.relu(self_contrib + neighbor_contrib)
+        # Matmul: (batch, seq, d, n_heads_j) @ (n_heads_j, n_heads_i) -> (batch, seq, d, n_heads_i)
+        # The einsum 'ji' means we need to transpose the adjacency matrix before multiplying.
+        neighbor_contrib_reshaped = torch.matmul(transformed_neighbor_reshaped, adj_and_g.T)
 
-        # Apply normalization for stability
-        mixed = self.norm(mixed)
+        # Reshape back to original format
+        # (batch, seq, d, n_heads_i) -> (batch, n_heads_i, seq, d)
+        neighbor_contrib = neighbor_contrib_reshaped.permute(0, 3, 1, 2)
+
+        # Combine, activate, and normalize
+        mixed = self.norm(F.relu(self_contrib + neighbor_contrib))
 
         # Unstack back to list
-        return [mixed[i] for i in range(self.num_heads)]
+        return [mixed[:, i, :, :] for i in range(self.num_heads)]
 
     def get_mixing_statistics(self) -> dict:
         """Return diagnostic information about mixing patterns."""

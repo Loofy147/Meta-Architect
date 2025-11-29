@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 import math
+import copy
+from typing import Dict
+import torch.func
 from hamha.topology import generate_hex_grid, build_adjacency_matrix
 from hamha.heads import CoordinateBiasFunction, HyperNetwork, AttentionHead
 from hamha.mixing import GNNMixingLayer
@@ -32,8 +35,11 @@ class HexagonalMultiHeadAttention(nn.Module):
         self.coord_to_idx = {coord: i for i, coord in enumerate(self.grid_coords)}
 
         if use_spectral:
+            # The number of eigenvectors cannot exceed the number of nodes (heads)
+            actual_k = min(k_eigenvectors, self.num_heads)
+
             self.spectral_attention = SpectralAttentionLayer(
-                d_model, self.num_heads, d_head, k_eigenvectors
+                d_model, self.num_heads, d_head, actual_k
             )
             if grid_radius not in EIGEN_CACHE:
                 adj = build_adjacency_matrix(self.grid_coords)
@@ -41,8 +47,8 @@ class HexagonalMultiHeadAttention(nn.Module):
                 laplacian = degree - adj
                 eigenvalues, eigenvectors = torch.linalg.eigh(laplacian)
                 EIGEN_CACHE[grid_radius] = (
-                    eigenvectors[:, :k_eigenvectors],
-                    eigenvalues[:k_eigenvectors],
+                    eigenvectors[:, :actual_k],
+                    eigenvalues[:actual_k],
                 )
             eigenvectors, eigenvalues = EIGEN_CACHE[grid_radius]
             self.spectral_attention.set_graph_spectrum(eigenvectors, eigenvalues)
@@ -76,10 +82,9 @@ class HexagonalMultiHeadAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 2:
-            x = x.unsqueeze(0)  # Add batch dimension
+            x = x.unsqueeze(0)
 
         if self.use_spectral:
-            # Spectral attention provides a global context, making the local GNN mixing layer redundant
             spectral_output = self.spectral_attention(x)
             return torch.matmul(spectral_output, self.W_O)
         else:
@@ -88,3 +93,23 @@ class HexagonalMultiHeadAttention(nn.Module):
             mixed_outputs = self.gnn_mixing(head_outputs)
             concatenated = torch.cat(mixed_outputs, dim=-1)
             return torch.matmul(concatenated, self.W_O)
+
+    def forward_functional(
+        self,
+        params: Dict[str, torch.Tensor],
+        buffers: Dict[str, torch.Tensor],
+        x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        A functional version of the forward pass for use with `torch.func`.
+        """
+        return torch.func.functional_call(self, (params, buffers), (x,))
+
+    def clone_for_functional(self):
+        """
+        Prepares the model for functional programming by returning named
+        parameter and buffer dictionaries.
+        """
+        params = dict(self.named_parameters())
+        buffers = dict(self.named_buffers())
+        return params, buffers

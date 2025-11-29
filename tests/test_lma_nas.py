@@ -16,13 +16,17 @@ class TestMetaNAS:
         embedding = encoder(sample_data)
         assert embedding.shape == (64,)
 
-    def test_meta_nas_controller_forward(self):
-        """Test the forward pass of the MetaNASController."""
+    def test_meta_nas_controller_sample(self):
+        """Test the sample_architecture method of the MetaNASController."""
         controller = MetaNASController(task_embedding_dim=64)
         task_embedding = torch.randn(64)
-        arch_desc = controller(task_embedding)
-        assert isinstance(arch_desc, dict)
-        assert is_valid_architecture(arch_desc)
+
+        arch_params, log_prob = controller.sample_architecture(task_embedding)
+
+        assert isinstance(arch_params, dict)
+        assert is_valid_architecture(arch_params)
+        assert isinstance(log_prob, torch.Tensor)
+        assert log_prob.dim() == 0
 
     def test_search_space_validation(self):
         """Test the search space validation function."""
