@@ -57,14 +57,13 @@ class TestEmergencyProtocols:
         protocols = EmergencyProtocols(model_a)
         protocols._transfer_weights(model_a, model_b)
 
-        overlapping_coords = set(model_a.coord_to_idx.keys()).intersection(set(model_b.coord_to_idx.keys()))
-        for coord in overlapping_coords:
-            idx_a = model_a.coord_to_idx[coord]
-            idx_b = model_b.coord_to_idx[coord]
-            filter_a = model_a.spectral_attention.filters[idx_a]
-            filter_b = model_b.spectral_attention.filters[idx_b]
-            assert torch.equal(filter_a.band_boundaries, filter_b.band_boundaries)
-            assert torch.equal(filter_a.filter_weights, filter_b.filter_weights)
+        # Check that the spectral filter weights are correctly transferred
+        weights_a = model_a.spectral_attention.spectral_filter.weights.data
+        weights_b = model_b.spectral_attention.spectral_filter.weights.data
+
+        # The number of weights transferred should be the minimum of the two k values
+        k_transferred = min(len(weights_a), len(weights_b))
+        assert torch.equal(weights_a[:k_transferred], weights_b[:k_transferred])
 
     def test_weight_transfer_gnn_mixing(self):
         """Tests weight transfer for the GNN mixing layer."""

@@ -132,7 +132,7 @@ class EmergencyProtocols:
         task_embedding = self.task_encoder(sample_data)
 
         # 2. Use Meta-NAS controller to generate new architecture
-        new_arch = self.meta_nas_controller(task_embedding)
+        new_arch, _ = self.meta_nas_controller.sample_architecture(task_embedding)
 
         # 3. Validate the new architecture
         if not is_valid_architecture(new_arch):
@@ -187,11 +187,43 @@ class EmergencyProtocols:
         if new_model.use_spectral and old_model.use_spectral:
             old_sa = old_model.spectral_attention
             new_sa = new_model.spectral_attention
-            for coord in overlapping_coords:
-                old_idx = old_model.coord_to_idx[coord]
-                new_idx = new_model.coord_to_idx[coord]
-                new_sa.filters[new_idx].load_state_dict(old_sa.filters[old_idx].state_dict())
-            logger.info("Transferred spectral filters.")
+
+            # Transfer W_Q, W_K, W_V by slicing, similar to W_O
+            d_head = new_model.d_head
+            if old_model.d_head == d_head:
+                with torch.no_grad():
+                    for coord in overlapping_coords:
+                        old_idx = old_model.coord_to_idx[coord]
+                        new_idx = new_model.coord_to_idx[coord]
+
+                        # Slice and copy weights for each projection matrix
+                        old_slice_q = old_sa.W_Q.weight.data[old_idx * d_head : (old_idx + 1) * d_head, :]
+                        new_sa.W_Q.weight.data[new_idx * d_head : (new_idx + 1) * d_head, :] = old_slice_q.clone()
+                        old_slice_q_bias = old_sa.W_Q.bias.data[old_idx * d_head : (old_idx + 1) * d_head]
+                        new_sa.W_Q.bias.data[new_idx * d_head : (new_idx + 1) * d_head] = old_slice_q_bias.clone()
+
+                        old_slice_k = old_sa.W_K.weight.data[old_idx * d_head : (old_idx + 1) * d_head, :]
+                        new_sa.W_K.weight.data[new_idx * d_head : (new_idx + 1) * d_head, :] = old_slice_k.clone()
+                        old_slice_k_bias = old_sa.W_K.bias.data[old_idx * d_head : (old_idx + 1) * d_head]
+                        new_sa.W_K.bias.data[new_idx * d_head : (new_idx + 1) * d_head] = old_slice_k_bias.clone()
+
+                        old_slice_v = old_sa.W_V.weight.data[old_idx * d_head : (old_idx + 1) * d_head, :]
+                        new_sa.W_V.weight.data[new_idx * d_head : (new_idx + 1) * d_head, :] = old_slice_v.clone()
+                        old_slice_v_bias = old_sa.W_V.bias.data[old_idx * d_head : (old_idx + 1) * d_head]
+                        new_sa.W_V.bias.data[new_idx * d_head : (new_idx + 1) * d_head] = old_slice_v_bias.clone()
+
+                logger.info("Transferred spectral W_Q, W_K, W_V weights.")
+
+            # Transfer spectral filter weights, handling different k
+            if old_sa.spectral_filter and new_sa.spectral_filter:
+                old_weights = old_sa.spectral_filter.weights.data
+                new_weights = new_sa.spectral_filter.weights.data
+
+                # Copy weights for the minimum number of overlapping eigenvectors
+                k_to_transfer = min(len(old_weights), len(new_weights))
+                new_weights[:k_to_transfer] = old_weights[:k_to_transfer]
+
+                logger.info(f"Transferred {k_to_transfer} spectral filter weights.")
 
         elif not new_model.use_spectral and not old_model.use_spectral:
             use_hypernet_old = getattr(old_model, 'hypernet', None) is not None
