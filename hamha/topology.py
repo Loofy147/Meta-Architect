@@ -6,7 +6,17 @@ import numpy as np
 
 @dataclass
 class HexCoordinate:
-    """Axial coordinates for hexagonal grid positioning."""
+    """Represents axial coordinates for positioning on a hexagonal grid.
+
+    This dataclass provides a convenient way to store and operate on hexagonal
+    coordinates. It includes methods for finding neighbors and calculating
+    distances on the grid. The axial coordinate system is used for its
+    simplicity in these calculations.
+
+    Attributes:
+        q (int): The 'q' coordinate in the axial system.
+        r (int): The 'r' coordinate in the axial system.
+    """
 
     q: int
     r: int
@@ -23,12 +33,26 @@ class HexCoordinate:
         return f"H({self.q},{self.r})"
 
     def neighbors(self) -> List["HexCoordinate"]:
-        """Return the 6 direct neighbors in hexagonal grid."""
+        """Returns the 6 direct neighbors of this coordinate on the grid.
+
+        Returns:
+            List[HexCoordinate]: A list of the six neighboring coordinates.
+        """
         directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
         return [HexCoordinate(self.q + dq, self.r + dr) for dq, dr in directions]
 
     def distance(self, other: "HexCoordinate") -> int:
-        """Hexagonal grid distance."""
+        """Calculates the hexagonal grid distance to another coordinate.
+
+        This is the shortest number of steps required to move from this
+        coordinate to the other on the hex grid.
+
+        Args:
+            other (HexCoordinate): The coordinate to measure the distance to.
+
+        Returns:
+            int: The distance between the two coordinates.
+        """
         return (
             abs(self.q - other.q)
             + abs(self.q + self.r - other.q - other.r)
@@ -37,7 +61,17 @@ class HexCoordinate:
 
 
 def generate_hex_grid(radius: int) -> List[HexCoordinate]:
-    """Generate hexagonal grid coordinates within given radius."""
+    """Generates a list of `HexCoordinate`s for a grid of a given radius.
+
+    The grid is centered at (0,0) and includes all coordinates within the
+    specified hexagonal distance from the center.
+
+    Args:
+        radius (int): The radius of the hexagonal grid.
+
+    Returns:
+        List[HexCoordinate]: A list of all coordinates in the grid.
+    """
     coords = []
     for q in range(-radius, radius + 1):
         r1 = max(-radius, -q - radius)
@@ -48,7 +82,19 @@ def generate_hex_grid(radius: int) -> List[HexCoordinate]:
 
 
 def build_adjacency_matrix(coords: List[HexCoordinate]) -> torch.Tensor:
-    """Build adjacency matrix for hexagonal grid topology."""
+    """Builds an adjacency matrix for a given list of hexagonal coordinates.
+
+    The resulting matrix represents the connectivity of the graph where an
+    edge exists between two coordinates if they are direct neighbors on the
+    hexagonal grid.
+
+    Args:
+        coords (List[HexCoordinate]): The list of coordinates (nodes) in the
+            graph.
+
+    Returns:
+        torch.Tensor: A dense adjacency matrix of shape [n_coords, n_coords].
+    """
     n = len(coords)
     adj = torch.zeros(n, n)
     coord_to_idx = {coord: i for i, coord in enumerate(coords)}

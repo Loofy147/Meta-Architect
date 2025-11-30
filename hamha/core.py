@@ -15,7 +15,37 @@ EIGEN_CACHE = {}
 
 
 class HexagonalMultiHeadAttention(nn.Module):
-    """Complete HAMHA mechanism with hexagonal topology."""
+    """Implements the Hexagonal Multi-Head Attention (HAMHA) mechanism.
+
+    This module arranges attention heads in a hexagonal grid topology, allowing
+    for efficient spatial reasoning and information flow between heads. It can
+    operate in two modes:
+    1.  **Standard Mode**: Each head computes attention independently, and their
+        outputs are mixed using a Graph Neural Network (GNN).
+    2.  **Spectral Mode**: The attention mechanism is reformulated in the graph
+        Fourier domain, using the eigenvectors of the graph Laplacian for a
+        more global and efficient computation.
+
+    The module also supports dynamic weight generation via a HyperNetwork and
+    is designed to be governed by the Lead Meta-Architect (LMA), which can
+    adjust parameters like entropy regularization.
+
+    Attributes:
+        d_model (int): The total dimensionality of the input and output.
+        d_head (int): The dimensionality of each attention head.
+        use_spectral (bool): If True, operates in spectral mode.
+        grid_coords (list): A list of HexCoordinate objects representing the grid.
+        num_heads (int): The total number of attention heads.
+        coord_to_idx (dict): A mapping from HexCoordinate to an integer index.
+        spectral_attention (SpectralAttentionLayer): The spectral attention module.
+        bias_function (CoordinateBiasFunction): Generates coordinate-based biases.
+        hypernet (HyperNetwork): Generates head weights dynamically.
+        heads (nn.ModuleList): A list of standard AttentionHead modules.
+        gnn_mixing (GNNMixingLayer): The GNN layer for mixing head outputs.
+        W_O (nn.Parameter): The output projection matrix.
+        entropy_reg (float): A coefficient for entropy regularization, controlled
+            externally by the LMA.
+    """
 
     def __init__(
         self,
@@ -26,6 +56,25 @@ class HexagonalMultiHeadAttention(nn.Module):
         use_spectral: bool = False,
         k_eigenvectors: int = 16,
     ):
+        """Initializes the HexagonalMultiHeadAttention module.
+
+        Args:
+            d_model (int): The total dimensionality of the input feature space.
+            grid_radius (int, optional): The radius of the hexagonal grid. The
+                total number of heads will be 3*r^2 + 3*r + 1. Defaults to 2.
+            d_head (int, optional): The dimensionality of each individual
+                attention head. Defaults to 64.
+            use_hypernet (bool, optional): If True, a HyperNetwork is used to
+                generate query, key, and value projection matrices based on
+                head coordinates. Not compatible with spectral mode.
+                Defaults to False.
+            use_spectral (bool, optional): If True, the module operates in
+                spectral attention mode. This mode is more efficient for large
+                grids. Defaults to False.
+            k_eigenvectors (int, optional): The number of eigenvectors to use
+                for the spectral attention mechanism. This value is capped by
+                the total number of heads. Defaults to 16.
+        """
         super().__init__()
         self.d_model = d_model
         self.d_head = d_head
@@ -81,6 +130,16 @@ class HexagonalMultiHeadAttention(nn.Module):
         self.entropy_reg = 0.0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Performs the forward pass for the HAMHA module.
+
+        Args:
+            x (torch.Tensor): The input tensor of shape
+                [batch_size, seq_len, d_model]. If the input is 2D, it is
+                automatically unsqueezed to add a batch dimension of 1.
+
+        Returns:
+            torch.Tensor: The output tensor of shape [batch_size, seq_len, d_model].
+        """
         if x.dim() == 2:
             x = x.unsqueeze(0)
 
@@ -100,15 +159,35 @@ class HexagonalMultiHeadAttention(nn.Module):
         buffers: Dict[str, torch.Tensor],
         x: torch.Tensor
     ) -> torch.Tensor:
-        """
-        A functional version of the forward pass for use with `torch.func`.
+        """A functional version of the forward pass for use with `torch.func`.
+
+        This method allows the model to be used in functional programming
+        paradigms, such as meta-learning with higher-order gradients, by
+        uncoupling the model's parameters from its definition.
+
+        Args:
+            params (Dict[str, torch.Tensor]): A dictionary of the model's
+                parameters, typically obtained from `clone_for_functional`.
+            buffers (Dict[str, torch.Tensor]): A dictionary of the model's
+                buffers.
+            x (torch.Tensor): The input tensor for the forward pass.
+
+        Returns:
+            torch.Tensor: The output of the model for the given input and
+                parameters.
         """
         return torch.func.functional_call(self, (params, buffers), (x,))
 
     def clone_for_functional(self):
-        """
-        Prepares the model for functional programming by returning named
-        parameter and buffer dictionaries.
+        """Prepares the model for functional programming.
+
+        This method captures the model's current state (parameters and buffers)
+        in dictionaries, which can then be passed to `forward_functional`.
+
+        Returns:
+            tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]: A tuple
+                containing a dictionary of named parameters and a dictionary of
+                named buffers.
         """
         params = dict(self.named_parameters())
         buffers = dict(self.named_buffers())
