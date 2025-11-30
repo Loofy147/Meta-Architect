@@ -5,15 +5,49 @@ from lma.telemetry import TelemetrySnapshot
 
 
 class ArchitecturalDynamicsPredictor:
-    """Forecast future system degradation based on trends."""
+    """Forecasts future system degradation based on historical trends.
+
+    The Architectural Dynamics Predictor (ADP) uses simple linear regression
+    on a sliding window of historical telemetry data to predict the future
+    trajectories of key metrics. This allows the LMA to anticipate potential
+    issues like attention fixation or computational bottlenecks before they
+    become critical.
+
+    Attributes:
+        window_size (int): The number of recent telemetry snapshots to use for
+            linear regression.
+    """
 
     def __init__(self, window_size: int = 20):
+        """Initializes the ArchitecturalDynamicsPredictor.
+
+        Args:
+            window_size (int, optional): The size of the historical window for
+                trend analysis. Defaults to 20.
+        """
         self.window_size = window_size
 
     def predict_entropy_trajectory(
         self, history: List[TelemetrySnapshot], coord: str, steps_ahead: int = 20
     ) -> Dict:
-        """Predict future entropy values for a head."""
+        """Predicts the future entropy trajectory for a specific attention head.
+
+        This method performs a linear regression on the recent entropy history
+        of a single head to forecast its values for a specified number of future
+        steps. It also estimates the risk of attention fixation.
+
+        Args:
+            history (List[TelemetrySnapshot]): The historical telemetry data.
+            coord (str): The coordinate string of the head to be analyzed
+                (e.g., "H(0,0)").
+            steps_ahead (int, optional): The number of future steps to predict.
+                Defaults to 20.
+
+        Returns:
+            Dict: A dictionary containing the predictions, trend analysis, and
+                risk assessment. Returns a dictionary with an "error" key if
+                there is insufficient data.
+        """
         if len(history) < 5:
             return {"error": "Insufficient history"}
 
@@ -56,7 +90,23 @@ class ArchitecturalDynamicsPredictor:
     def predict_t_mix_trajectory(
         self, history: List[TelemetrySnapshot], steps_ahead: int = 20
     ) -> Dict:
-        """Predict future T_mix values."""
+        """Predicts the future trajectory of the GNN mixing time (t_mix).
+
+        This method performs a linear regression on the recent history of
+        `t_mix` to forecast its future values. It also provides a qualitative
+        assessment of the risk of the GNN mixer becoming a computational
+        bottleneck.
+
+        Args:
+            history (List[TelemetrySnapshot]): The historical telemetry data.
+            steps_ahead (int, optional): The number of future steps to predict.
+                Defaults to 20.
+
+        Returns:
+            Dict: A dictionary containing the predictions, trend analysis, and
+                risk assessment. Returns a dictionary with an "error" key if
+                there is insufficient data.
+        """
         if len(history) < 5:
             return {"error": "Insufficient history"}
 

@@ -5,11 +5,31 @@ from typing import List
 import math
 
 class GNNMixingLayer(nn.Module):
-    """
-    Vectorized GNN mixing using sparse matrix operations.
+    """Mixes attention head outputs using a Graph Neural Network (GNN).
 
-    Performance improvements:
-    - Batch matrix multiplication instead of loops
+    This layer treats the attention heads as nodes in a graph and updates each
+    head's output by aggregating information from its neighbors. The mixing
+    is performed using a vectorized approach with batch matrix multiplication
+    for efficiency, avoiding explicit loops over heads.
+
+    Each head's new state is a combination of its own transformed state (self-
+    contribution) and a weighted sum of its neighbors' transformed states
+    (neighbor contribution).
+
+    Attributes:
+        d_head (int): The dimensionality of each attention head's output.
+        num_heads (int): The total number of attention heads.
+        adjacency_dense (torch.Tensor): A buffer storing the dense adjacency
+            matrix of the head graph.
+        W_self (nn.Parameter): The learnable weight matrix for the self-
+            contribution.
+        W_neighbor (nn.Parameter): The learnable weight matrix for the neighbor
+            contributions.
+        lambda_self (nn.Parameter): A learnable vector of coefficients for the
+            self-contribution of each head.
+        g_ij (nn.Parameter): A learnable matrix of weights for the contribution
+            of each neighbor `j` to head `i`.
+        norm (nn.LayerNorm): Layer normalization for stabilizing the output.
     """
 
     def __init__(
@@ -18,6 +38,14 @@ class GNNMixingLayer(nn.Module):
         num_heads: int,
         adjacency_matrix: torch.Tensor,
     ):
+        """Initializes the GNNMixingLayer.
+
+        Args:
+            d_head (int): The dimensionality of each attention head.
+            num_heads (int): The total number of attention heads.
+            adjacency_matrix (torch.Tensor): A dense tensor of shape
+                [num_heads, num_heads] representing the graph connectivity.
+        """
         super().__init__()
         self.d_head = d_head
         self.num_heads = num_heads
@@ -38,14 +66,16 @@ class GNNMixingLayer(nn.Module):
         self.norm = nn.LayerNorm(d_head)
 
     def forward(self, head_outputs: List[torch.Tensor]) -> List[torch.Tensor]:
-        """
-        Vectorized forward pass.
+        """Performs the GNN mixing operation.
 
         Args:
-            head_outputs: List of [batch, seq_len, d_head] tensors
+            head_outputs (List[torch.Tensor]): A list of tensors, where each
+                tensor is the output of an attention head. Each tensor should
+                have the shape [batch_size, seq_len, d_head].
 
         Returns:
-            List of mixed outputs with same shapes
+            List[torch.Tensor]: A list of mixed output tensors, with the same
+                shape as the input tensors.
         """
         # Stack all heads: [batch, num_heads, seq_len, d_head]
         stacked_heads = torch.stack(head_outputs, dim=1)
@@ -80,7 +110,21 @@ class GNNMixingLayer(nn.Module):
         return [mixed[:, i, :, :] for i in range(self.num_heads)]
 
     def get_mixing_statistics(self) -> dict:
-        """Return diagnostic information about mixing patterns."""
+        """Returns diagnostic information about the mixing patterns.
+
+        This method provides insights into the learned mixing behavior, which
+        can be used for analysis and monitoring by the LMA.
+
+        Returns:
+            dict: A dictionary containing key statistics:
+                - 'self_weights': The learned self-contribution weights for
+                  each head.
+                - 'neighbor_weights': The learned neighbor-contribution weights.
+                - 'avg_self_weight': The average self-contribution weight.
+                - 'avg_neighbor_weight': The average neighbor-contribution
+                  weight.
+                - 'effective_neighbors': The number of neighbors for each head.
+        """
         return {
             'self_weights': self.lambda_self.detach().cpu().numpy(),
             'neighbor_weights': self.g_ij.detach().cpu().numpy(),
@@ -90,7 +134,14 @@ class GNNMixingLayer(nn.Module):
         }
 
 def benchmark_mixing_layers():
-    """Compare performance of original vs optimized mixing."""
+    """Compares the performance of the original and optimized GNN mixing layers.
+
+    This function sets up a benchmark to measure the speedup gained from
+    vectorizing the mixing operation. It creates instances of both the
+    original (loop-based) and the current (vectorized) mixing layers,
+    runs them for a fixed number of iterations on dummy data, and prints
+    the execution times and the speedup factor.
+    """
     import time
 
     class OriginalGNNMixingLayer(nn.Module):

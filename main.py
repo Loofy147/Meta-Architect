@@ -6,7 +6,18 @@ import matplotlib.pyplot as plt
 
 
 def main_demo():
-    """Demonstration of HAMHA with LMA governance."""
+    """Runs a demonstration of the HAMHA model with LMA governance.
+
+    This function initializes a HAMHA model and an LMA instance, then simulates
+    a series of training steps. During the simulation, it periodically prints
+    status reports from the LMA and generates a final, comprehensive report at
+    the end. This serves as a showcase for the LMA's monitoring and reporting
+    capabilities.
+
+    Returns:
+        tuple[HexagonalMultiHeadAttention, LeadMetaArchitect]: A tuple
+            containing the initialized HAMHA and LMA instances.
+    """
 
     print("\n" + "═" * 70)
     print("INITIALIZING HAMHA + LMA SYSTEM")

@@ -13,7 +13,22 @@ from lma.meta_nas import MetaNASController
 logger = logging.getLogger(__name__)
 
 class EmergencyProtocols:
-    """Emergency response protocols for system degradation."""
+    """A collection of protocols for responding to system degradation.
+
+    This class implements a set of pre-defined actions that the LMA can take
+    to correct undesirable behaviors in the HAMHA model, such as attention
+    fixation or rank collapse. It also includes the protocol for adapting the
+    model's architecture using Meta-NAS.
+
+    Attributes:
+        model (HexagonalMultiHeadAttention): The HAMHA model to be acted upon.
+        task_encoder (TaskEncoder, optional): The task encoder for Meta-NAS.
+        meta_nas_controller (MetaNASController, optional): The controller for
+            Meta-NAS.
+        protocol_history (List[Dict]): A log of all executed protocols.
+        meta_nas_enabled (bool): A flag indicating if Meta-NAS components are
+            available.
+    """
 
     def __init__(
         self,
@@ -21,6 +36,15 @@ class EmergencyProtocols:
         task_encoder: Optional[TaskEncoder] = None,
         meta_nas_controller: Optional[MetaNASController] = None,
     ):
+        """Initializes the EmergencyProtocols.
+
+        Args:
+            hamha_model (HexagonalMultiHeadAttention): The HAMHA model.
+            task_encoder (TaskEncoder, optional): The task encoder for Meta-NAS.
+                Defaults to None.
+            meta_nas_controller (MetaNASController, optional): The controller
+                for Meta-NAS. Defaults to None.
+        """
         self.model = hamha_model
         self.task_encoder = task_encoder
         self.meta_nas_controller = meta_nas_controller
@@ -33,7 +57,19 @@ class EmergencyProtocols:
     def trigger_aap_ad_phase1(
         self, target_head_idx: int, entropy_reg_increment: float = 0.01
     ):
-        """Attention Diversity Protocol - Phase 1: Soft Intervention."""
+        """Executes the Attention Diversity Protocol, Phase 1 (Soft Intervention).
+
+        This protocol is a gentle nudge to encourage a potentially fixated
+        attention head to explore a more diverse attention distribution. It
+        increases the global entropy regularization and adjusts the GNN mixing
+        coefficients to reduce the head's self-influence and increase its
+        receptiveness to its neighbors.
+
+        Args:
+            target_head_idx (int): The index of the head to be targeted.
+            entropy_reg_increment (float, optional): The amount to increase
+                the entropy regularization by. Defaults to 0.01.
+        """
         self.model.entropy_reg += entropy_reg_increment
 
         # Only apply GNN mixing adjustments if not using spectral attention
@@ -59,7 +95,19 @@ class EmergencyProtocols:
         return f"AAP_AD_PHASE1 executed on head {target_head_idx}"
 
     def trigger_aap_ad_phase2(self, target_head_idx: int):
-        """Attention Diversity Protocol - Phase 2: Hard Intervention."""
+        """Executes the Attention Diversity Protocol, Phase 2 (Hard Intervention).
+
+        This protocol is a more forceful intervention for persistently fixated
+        heads. It adds a small random perturbation to the head's projection
+        matrices, knocking it out of a potential local minimum. This protocol is
+        only applicable to non-spectral models.
+
+        Args:
+            target_head_idx (int): The index of the head to be targeted.
+
+        Returns:
+            str: A message describing the result of the operation.
+        """
         # Only works with non-spectral HAMHA
         if self.model.use_spectral:
             return "AAP_AD_PHASE2 not applicable for spectral attention"
@@ -86,7 +134,20 @@ class EmergencyProtocols:
     def reset_head_projections(
         self, target_head_idx: int, strategy: str = "orthogonal"
     ):
-        """Reset projection matrices for a head."""
+        """Resets the projection matrices for a specific attention head.
+
+        This protocol is typically used to address rank collapse. It re-initializes
+        the W_Q, W_K, and W_V matrices of a head using a specified strategy.
+        This protocol is only applicable to non-spectral models.
+
+        Args:
+            target_head_idx (int): The index of the head to be reset.
+            strategy (str, optional): The re-initialization strategy. Can be
+                'orthogonal' or 'xavier'. Defaults to "orthogonal".
+
+        Returns:
+            str: A message describing the result of the operation.
+        """
         # Only works with non-spectral HAMHA
         if self.model.use_spectral:
             return "Head reset not applicable for spectral attention"
@@ -115,15 +176,23 @@ class EmergencyProtocols:
         return f"Projections reset for head {target_head_idx} using {strategy}"
 
     def adapt_architecture(self, sample_data: torch.Tensor):
-        """
-        Generates a new HAMHA architecture for a new task using Meta-NAS.
+        """Generates a new HAMHA architecture for a new task using Meta-NAS.
+
+        This protocol orchestrates the Meta-NAS pipeline:
+        1. Encodes the task from sample data using the `TaskEncoder`.
+        2. Generates a new architecture using the `MetaNASController`.
+        3. Validates the proposed architecture.
+        4. Creates a new `HexagonalMultiHeadAttention` model instance.
+        5. Transfers weights from the old model to the new one to preserve
+           learned knowledge.
 
         Args:
-            sample_data: Sample batch of data from the new task
+            sample_data (torch.Tensor): A sample batch of data from the new task.
 
         Returns:
-            A tuple containing the new HAMHA model instance and the new architecture dict,
-            or (None, None) on failure.
+            tuple[Optional[HexagonalMultiHeadAttention], Optional[Dict]]: A
+                tuple containing the new HAMHA model instance and the new
+                architecture dictionary, or (None, None) on failure.
         """
         if not self.task_encoder or not self.meta_nas_controller:
             return None, None
@@ -158,9 +227,19 @@ class EmergencyProtocols:
         return new_model, new_arch
 
     def _transfer_weights(self, old_model: HexagonalMultiHeadAttention, new_model: HexagonalMultiHeadAttention):
-        """
-        Transfers weights from an old model to a new, potentially different, architecture.
-        This preserves learned knowledge for overlapping parts of the architecture.
+        """Transfers weights from an old model to a new one.
+
+        This method intelligently copies weights for the parts of the
+        architecture that overlap between the old and new models. This is
+        crucial for preserving learned knowledge during architecture adaptation.
+        It handles weight transfer for both spectral and standard models, and
+        can even transfer weights between models with different grid sizes or
+        head dimensions by slicing and copying the relevant parts of the
+        weight tensors.
+
+        Args:
+            old_model (HexagonalMultiHeadAttention): The source model.
+            new_model (HexagonalMultiHeadAttention): The destination model.
         """
         logger.info("Initiating weight transfer between HAMHA models...")
 

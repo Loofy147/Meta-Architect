@@ -2,26 +2,30 @@ import torch
 import torch.nn as nn
 
 class TaskEncoder(nn.Module):
-    """
-    ## Task Encoder
+    """Generates a numerical embedding for a given task.
 
-    This module is responsible for generating a numerical representation (embedding)
-    of a given task. The task embedding is a low-dimensional vector that captures
-    the essential characteristics of a task, such as its complexity, domain, and
-    objective.
+    This module creates a low-dimensional vector representation (embedding)
+    that captures the essential characteristics of a task. This embedding is
+    then used by the `MetaNASController` to propose a specialized architecture.
 
-    This embedding will be used by the Meta-NAS Controller to generate a
-    specialized architecture for the task.
+    The current implementation generates the embedding by computing the mean
+    of a sample batch of data and passing it through a simple feed-forward
+    network.
 
-    ### Forward Pass:
-
-    -   `sample_data`: A sample batch of data from the task.
-
-    ### Returns:
-
-    -   A tensor representing the task embedding.
+    Attributes:
+        d_in (int): The dimensionality of the input data features.
+        embedding_dim (int): The dimensionality of the output task embedding.
+        encoder (nn.Sequential): The neural network used to generate the
+            embedding.
     """
     def __init__(self, d_in: int, embedding_dim: int = 64):
+        """Initializes the TaskEncoder.
+
+        Args:
+            d_in (int): The dimensionality of the input features of the task data.
+            embedding_dim (int, optional): The desired dimensionality of the
+                task embedding. Defaults to 64.
+        """
         super().__init__()
         self.d_in = d_in
         self.embedding_dim = embedding_dim
@@ -32,13 +36,14 @@ class TaskEncoder(nn.Module):
         )
 
     def forward(self, sample_data: torch.Tensor) -> torch.Tensor:
-        """
-        Generates a task embedding from a sample of task data.
+        """Generates a task embedding from a sample of task data.
 
-        This implementation takes a sample batch of data and computes a simple
-        representation by taking the mean across the batch and sequence dimensions.
-        This representation is then passed through a small neural network to
-        produce the final task embedding.
+        Args:
+            sample_data (torch.Tensor): A sample batch of data from the task,
+                typically of shape [batch_size, seq_len, d_in].
+
+        Returns:
+            torch.Tensor: The task embedding vector of shape [embedding_dim].
         """
         # For now, we'll use the mean of the sample data as the input to the encoder.
         # This is a simple way to get a representation of the data's distribution.

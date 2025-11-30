@@ -16,13 +16,39 @@ import torch
 
 
 class LeadMetaArchitect:
-    """
-    Lead Meta-Architect (LMA) - Central Intelligence and Control Unit
+    """The central intelligence and control unit for a HAMHA model.
 
-    Implements perceptive omniscience and prescriptive agency over HAMHA.
+    The Lead Meta-Architect (LMA) provides governance over a `HexagonalMultiHeadAttention`
+    model. It collects real-time telemetry, performs causal reasoning, generates
+    hypotheses about the model's state, predicts future dynamics, and executes
+    interventions to maintain stability and performance. It can also perform
+    meta-neural architecture search (Meta-NAS) to adapt the HAMHA model to new
+    tasks.
+
+    Attributes:
+        model (HexagonalMultiHeadAttention): The HAMHA model being governed.
+        enable_meta_nas (bool): Flag to enable Meta-NAS capabilities.
+        telemetry (TelemetryCollector): The subsystem for collecting data from the model.
+        cmcg (CrossModalCausalGraph): The causal graph for reasoning about the model.
+        hge (HypothesisGenerationEngine): The subsystem for generating hypotheses.
+        adp (ArchitecturalDynamicsPredictor): The subsystem for predicting future states.
+        evolutionary (EvolutionaryModules): Manages long-term evolutionary adaptations.
+        task_encoder (TaskEncoder, optional): Encodes task data for Meta-NAS.
+        meta_nas_controller (MetaNASController, optional): Proposes new architectures.
+        protocols (EmergencyProtocols): Handles automated interventions.
+        monitoring_sectors (Dict[str, Dict]): Tracks heads under active monitoring.
+        alert_history (List[Dict]): A history of all triggered alerts.
     """
 
     def __init__(self, hamha_model: HexagonalMultiHeadAttention, enable_meta_nas: bool = False):
+        """Initializes the LeadMetaArchitect.
+
+        Args:
+            hamha_model (HexagonalMultiHeadAttention): The HAMHA model to be
+                governed.
+            enable_meta_nas (bool, optional): If True, enables the Meta-NAS
+                subsystems for architecture adaptation. Defaults to False.
+        """
         self.model = hamha_model
         self.enable_meta_nas = enable_meta_nas
 
@@ -60,7 +86,20 @@ class LeadMetaArchitect:
         print("═" * 70)
 
     def process_step(self) -> Dict:
-        """Main LMA processing loop - call after each training step."""
+        """The main processing loop for the LMA, intended to be called after each training step.
+
+        This method orchestrates the core functions of the LMA:
+        1.  Collects a `TelemetrySnapshot` from the model.
+        2.  Generates causal hypotheses if any alerts are present in the snapshot.
+        3.  Generates predictions about future model dynamics.
+        4.  Evaluates and triggers any necessary emergency interventions.
+        5.  Updates the internal causal graph based on the new observations.
+
+        Returns:
+            Dict: A dictionary containing the results of the processing step,
+                including the telemetry snapshot, any generated hypotheses,
+                predictions, a list of interventions performed, and a status report.
+        """
         # 1. Collect telemetry
         snapshot = self.telemetry.collect()
 
@@ -93,7 +132,20 @@ class LeadMetaArchitect:
         }
 
     def _evaluate_intervention_triggers(self, snapshot: TelemetrySnapshot) -> List[str]:
-        """Evaluate if any emergency protocols should be triggered."""
+        """Evaluates telemetry data to determine if any emergency protocols should be triggered.
+
+        This method checks for conditions such as low attention entropy or rapid
+        entropy drift, which are indicative of potential model instability. If
+        a trigger condition is met, it initiates the appropriate intervention
+        protocol.
+
+        Args:
+            snapshot (TelemetrySnapshot): The latest telemetry data from the model.
+
+        Returns:
+            List[str]: A list of strings describing the interventions that were
+                triggered.
+        """
         interventions = []
 
         for coord_str, entropy in snapshot.attention_entropy.items():
@@ -127,7 +179,16 @@ class LeadMetaArchitect:
         return interventions
 
     def _update_cmcg(self, snapshot: TelemetrySnapshot):
-        """Update causal graph based on observations."""
+        """Updates the Cross-Modal Causal Graph (CMCG) based on new observations.
+
+        This method strengthens the causal links in the graph based on the
+        alerts present in the latest telemetry snapshot. For example, if a
+        rank collapse alert is present, it strengthens the edge from
+        "kappa_increase" to "rank_collapse".
+
+        Args:
+            snapshot (TelemetrySnapshot): The latest telemetry data from the model.
+        """
         for alert in snapshot.alerts:
             if "RANK_COLLAPSE" in alert:
                 self.cmcg.update_edge("kappa_increase", "rank_collapse", True)
@@ -137,7 +198,18 @@ class LeadMetaArchitect:
                 self.cmcg.update_edge("drift", "fixation", True)
 
     def _generate_status_report(self, snapshot: TelemetrySnapshot) -> Dict:
-        """Generate comprehensive status report."""
+        """Generates a comprehensive status report from a telemetry snapshot.
+
+        This method aggregates key metrics from the snapshot to provide a high-level
+        overview of the model's current state, including its overall health,
+        average entropy, maximum condition number, and other vital signs.
+
+        Args:
+            snapshot (TelemetrySnapshot): The telemetry data to be summarized.
+
+        Returns:
+            Dict: A dictionary containing the summarized status report.
+        """
         # Compute grid-wide statistics
         avg_entropy = (
             np.mean(list(snapshot.attention_entropy.values()))
@@ -174,21 +246,61 @@ class LeadMetaArchitect:
         }
 
     def command_activate_module(self, module_name: str, parameters: Dict = None):
-        """LMA Command: Activate evolutionary module."""
+        """LMA Command: Activates an evolutionary module.
+
+        Args:
+            module_name (str): The name of the evolutionary module to activate.
+            parameters (Dict, optional): Configuration parameters for the module.
+                Defaults to None.
+
+        Returns:
+            str: A message indicating the result of the activation command.
+        """
         return self.evolutionary.activate_module(module_name, parameters)
 
     def command_adjust_entropy_regularization(self, delta: float):
-        """LMA Command: Adjust global entropy regularization."""
+        """LMA Command: Adjusts the global entropy regularization coefficient.
+
+        Args:
+            delta (float): The amount to add to the current entropy regularization
+                coefficient.
+
+        Returns:
+            str: A message confirming the new regularization value.
+        """
         self.model.entropy_reg += delta
         return f"Entropy regularization: {self.model.entropy_reg}"
 
     def command_reset_head(self, coord: HexCoordinate, strategy: str = "orthogonal"):
-        """LMA Command: Reset specific head projections."""
+        """LMA Command: Resets the projection matrices of a specific attention head.
+
+        Args:
+            coord (HexCoordinate): The coordinate of the head to reset.
+            strategy (str, optional): The re-initialization strategy to use
+                ('orthogonal', 'xavier', etc.). Defaults to "orthogonal".
+
+        Returns:
+            str: A message confirming that the head was reset.
+        """
         head_idx = self.model.coord_to_idx[coord]
         return self.protocols.reset_head_projections(head_idx, strategy)
 
     def command_adapt_architecture(self, sample_data: torch.Tensor):
-        """LMA Command: Trigger Meta-NAS architecture adaptation."""
+        """LMA Command: Triggers a Meta-NAS architecture adaptation cycle.
+
+        This command uses the provided sample data to encode a task embedding,
+        which is then used by the Meta-NAS controller to propose a new,
+        potentially more suitable, architecture for the HAMHA model. The LMA
+        then replaces the current model with the new one.
+
+        Args:
+            sample_data (torch.Tensor): A small batch of sample data
+                representative of the target task.
+
+        Returns:
+            str: A message indicating the result of the adaptation, including
+                the new architecture specification if successful.
+        """
         if not self.enable_meta_nas:
             return "Meta-NAS is not enabled."
 
@@ -204,7 +316,15 @@ class LeadMetaArchitect:
         return f"ADAPT_ARCHITECTURE complete. New architecture: {new_arch}"
 
     def generate_report(self) -> str:
-        """Generate detailed LMA report."""
+        """Generates a detailed, human-readable operational report.
+
+        The report summarizes the latest telemetry, system health, active
+        monitoring sectors, recent interventions, and active hypotheses,
+        providing a comprehensive overview of the LMA's status and actions.
+
+        Returns:
+            str: A formatted string containing the full report.
+        """
         if not self.telemetry.history:
             return "No telemetry data available"
 

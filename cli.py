@@ -5,7 +5,12 @@ from examples.training_integration import train_with_lma_monitoring
 
 
 def main_cli():
-    """Command-line interface for HAMHA + LMA."""
+    """Provides a command-line interface for running the HAMHA + LMA system.
+
+    This function parses command-line arguments to configure and run the
+    system in different modes, such as 'demo' or 'train'. It allows for
+    customizing model parameters and other settings.
+    """
     parser = argparse.ArgumentParser(
         description="HAMHA with Lead Meta-Architect Governance"
     )

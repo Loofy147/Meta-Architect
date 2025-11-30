@@ -9,7 +9,34 @@ from hamha.core import HexagonalMultiHeadAttention
 
 @dataclass
 class TelemetrySnapshot:
-    """Single timestep telemetry data."""
+    """A container for all telemetry data collected at a single timestep.
+
+    This dataclass acts as a structured container for various metrics
+    capturing the state of the HAMHA model at a specific point in time.
+
+    Attributes:
+        step (int): The current training step.
+        timestamp (float): The wall-clock time when the snapshot was taken.
+        condition_numbers (Dict[str, float]): The condition number of projection
+            matrices for each head, indicating spectral stability.
+        min_singular_values (Dict[str, float]): The smallest singular value of
+            projection matrices, related to rank collapse.
+        gradient_norms (Dict[str, float]): The norm of the gradients for each
+            head's projection matrices.
+        global_gradient_norm (float): The overall gradient norm of the model.
+        attention_entropy (Dict[str, float]): The entropy of the attention
+            distribution for each head, measuring specialization.
+        entropy_derivatives (Dict[str, float]): The change in entropy from the
+            previous step, indicating drift.
+        t_proj (float): Time spent in the projection phase.
+        t_attn (float): Time spent in the attention calculation phase.
+        t_mix (float): Time spent in the GNN mixing phase.
+        t_grad (float): Time spent in the gradient computation phase.
+        t_total (float): Total time for the forward and backward pass.
+        throughput_tps (float): Throughput in tokens per second.
+        alerts (List[str]): A list of alert messages generated based on the
+            collected metrics.
+    """
 
     step: int
     timestamp: float
@@ -41,9 +68,30 @@ class TelemetrySnapshot:
 
 
 class TelemetryCollector:
-    """Real-time telemetry collection from HAMHA system."""
+    """Collects real-time telemetry data from a HAMHA model.
+
+    This class is responsible for interfacing with a `HexagonalMultiHeadAttention`
+    model to extract a wide range of metrics at each training step. It can
+    handle both standard (non-spectral) and spectral attention models,
+    collecting the appropriate metrics for each.
+
+    The collected data is stored in a history of `TelemetrySnapshot` objects.
+
+    Attributes:
+        model (HexagonalMultiHeadAttention): The model to be monitored.
+        history (List[TelemetrySnapshot]): A chronological list of all collected
+            snapshots.
+        current_step (int): The current step count.
+        is_spectral (bool): A flag indicating whether the model is in spectral
+            mode.
+    """
 
     def __init__(self, hamha_model: HexagonalMultiHeadAttention):
+        """Initializes the TelemetryCollector.
+
+        Args:
+            hamha_model (HexagonalMultiHeadAttention): The HAMHA model to monitor.
+        """
         self.model = hamha_model
         self.history: List[TelemetrySnapshot] = []
         self.current_step = 0
@@ -53,7 +101,16 @@ class TelemetryCollector:
         self.is_spectral = hamha_model.use_spectral
 
     def collect(self) -> TelemetrySnapshot:
-        """Collect current telemetry snapshot."""
+        """Collects and returns a new telemetry snapshot.
+
+        This is the main method of the collector. It creates a new
+        `TelemetrySnapshot`, populates it with data by calling the appropriate
+        helper methods based on the model's mode (spectral or standard),
+        appends the snapshot to its history, and increments the step counter.
+
+        Returns:
+            TelemetrySnapshot: The newly collected telemetry data.
+        """
         snapshot = TelemetrySnapshot(step=self.current_step, timestamp=time.time())
 
         if self.is_spectral:
@@ -66,6 +123,16 @@ class TelemetryCollector:
         return snapshot
 
     def _collect_standard_telemetry(self, snapshot: TelemetrySnapshot):
+        """Collects telemetry for a standard (non-spectral) HAMHA model.
+
+        This method iterates over each attention head in the model to collect
+        head-specific metrics like condition numbers, gradient norms, and
+        attention entropy.
+
+        Args:
+            snapshot (TelemetrySnapshot): The snapshot object to be populated
+                with data.
+        """
         # Spectral analysis
         for i, head in enumerate(self.model.heads):
             coord = head.coord
@@ -121,6 +188,16 @@ class TelemetryCollector:
                     snapshot.alerts.append(f"DRIFT: {coord} H={entropy:.3f}")
 
     def _collect_spectral_telemetry(self, snapshot: TelemetrySnapshot):
+        """Collects telemetry for a spectral HAMHA model.
+
+        This method collects metrics from the global projection matrices of the
+        `SpectralAttentionLayer`, as head-specific matrices do not exist in
+        this mode.
+
+        Args:
+            snapshot (TelemetrySnapshot): The snapshot object to be populated
+                with data.
+        """
         spectral_layer = self.model.spectral_attention
         for name, layer in [
             ("Q", spectral_layer.W_Q),

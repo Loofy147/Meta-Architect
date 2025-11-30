@@ -1,8 +1,12 @@
 from typing import List, Dict, Any
 
-# Defines the search space for the Meta-NAS controller.
-# This centralized definition ensures that generated architectures are always valid
-# and provides a single point of control for experimentation.
+"""Defines the search space for the Meta-NAS controller.
+
+This module provides a centralized definition of the architectural choices
+that the `MetaNASController` can make. This ensures that any generated
+architecture is valid and provides a single point of control for
+experimentation with the search space.
+"""
 
 SEARCH_SPACE: Dict[str, List[Any]] = {
     "d_head": [16, 32, 64, 128],
@@ -13,19 +17,18 @@ SEARCH_SPACE: Dict[str, List[Any]] = {
 }
 
 def is_valid_architecture(arch_params: Dict[str, Any]) -> bool:
-    """
-    Validates a set of architecture parameters against the defined search space.
+    """Validates a set of architecture parameters against the search space.
 
-    This function ensures that a given architecture, represented as a dictionary of
-    hyperparameters, is valid by checking two conditions:
-    1. All hyperparameter names exist in the `SEARCH_SPACE`.
+    This function ensures that a given architecture is valid by checking that:
+    1. All hyperparameter names are defined in the `SEARCH_SPACE`.
     2. The value of each hyperparameter is one of the allowed values.
 
     Args:
-        arch_params: A dictionary of hyperparameters.
+        arch_params (Dict[str, Any]): A dictionary of hyperparameters
+            representing the architecture to be validated.
 
     Returns:
-        True if the architecture is valid, False otherwise.
+        bool: True if the architecture is valid, False otherwise.
     """
     for key, value in arch_params.items():
         if key not in SEARCH_SPACE:

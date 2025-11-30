@@ -3,14 +3,36 @@ from typing import List
 
 
 class CrossModalCausalGraph:
-    """Dynamic causal graph linking telemetry metrics to system behaviors."""
+    """A dynamic causal graph representing relationships in the HAMHA system.
+
+    This class uses a directed graph (DiGraph) from the `networkx` library to
+    model the causal relationships between different telemetry metrics and
+    observed system behaviors (e.g., "rank_collapse", "fixation"). The edges
+    in the graph are weighted by a confidence score that is updated based on
+    real-time observations.
+
+    This allows the LMA to perform causal reasoning, such as identifying the
+    likely causes of an observed effect or predicting the likely effects of a
+    potential cause.
+
+    Attributes:
+        graph (nx.DiGraph): The directed graph representing the causal model.
+            Edges have 'confidence', 'observations', and 'confirmations'
+            attributes.
+    """
 
     def __init__(self):
+        """Initializes the CrossModalCausalGraph."""
         self.graph = nx.DiGraph()
         self._initialize_base_structure()
 
     def _initialize_base_structure(self):
-        """Initialize known causal relationships."""
+        """Initializes the graph with a set of known causal relationships.
+
+        This method populates the graph with a foundational set of nodes and
+        edges that represent well-understood causal links within the attention
+        mechanism. These serve as a starting point for the dynamic updates.
+        """
         nodes = [
             "rank_collapse",
             "vanishing_gradient",
@@ -38,7 +60,18 @@ class CrossModalCausalGraph:
             self.graph.add_edge(src, dst, confidence=confidence, observations=1)
 
     def update_edge(self, source: str, target: str, observed: bool):
-        """Update causal edge based on observation."""
+        """Updates the confidence of a causal edge based on a new observation.
+
+        If the `observed` flag is True, it increases the confirmation count for
+        the edge, strengthening the belief in the causal link. The confidence
+        is recalculated as the ratio of confirmations to total observations.
+
+        Args:
+            source (str): The name of the source (cause) node.
+            target (str): The name of the target (effect) node.
+            observed (bool): A flag indicating whether the causal link was
+                observed in the latest telemetry.
+        """
         if not self.graph.has_node(source):
             self.graph.add_node(source)
         if not self.graph.has_node(target):
@@ -60,7 +93,19 @@ class CrossModalCausalGraph:
             )
 
     def get_likely_causes(self, effect: str, threshold: float = 0.7) -> List[str]:
-        """Find likely causes for an observed effect."""
+        """Finds the likely causes for an observed effect.
+
+        This method queries the graph to find all predecessor nodes of the given
+        `effect` node whose edge confidence exceeds the specified threshold.
+
+        Args:
+            effect (str): The name of the observed effect node.
+            threshold (float, optional): The minimum confidence level for a cause
+                to be considered likely. Defaults to 0.7.
+
+        Returns:
+            List[str]: A list of node names representing the likely causes.
+        """
         causes = []
         for pred in self.graph.predecessors(effect):
             if self.graph[pred][effect].get("confidence", 0) >= threshold:
@@ -68,7 +113,19 @@ class CrossModalCausalGraph:
         return causes
 
     def get_likely_effects(self, cause: str, threshold: float = 0.7) -> List[str]:
-        """Predict likely effects from a cause."""
+        """Predicts the likely effects of a given cause.
+
+        This method queries the graph to find all successor nodes of the given
+        `cause` node whose edge confidence exceeds the specified threshold.
+
+        Args:
+            cause (str): The name of the cause node.
+            threshold (float, optional): The minimum confidence level for an
+                effect to be considered likely. Defaults to 0.7.
+
+        Returns:
+            List[str]: A list of node names representing the likely effects.
+        """
         effects = []
         for succ in self.graph.successors(cause):
             if self.graph[cause][succ].get("confidence", 0) >= threshold:

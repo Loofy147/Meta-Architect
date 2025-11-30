@@ -28,7 +28,8 @@ git clone https://github.com/your-org/hamha-lma.git
 cd hamha-lma
 
 # Install dependencies
-pip install torch numpy scipy networkx matplotlib seaborn
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 # Run demo
 python main.py
@@ -265,7 +266,6 @@ for h in hypotheses:
 
 ### 4. Known Limitations
 
-- **State Reset on Adaptation**: When `lma.command_adapt_architecture()` is called, the existing `HexagonalMultiHeadAttention` model is replaced with a new instance. This means that learned weights are not transferred, and the model is effectively re-initialized. Future work aims to implement weight-preserving adaptation strategies.
 - **Single-GPU Training**: The current implementation is optimized for single-GPU training. Multi-GPU support is planned for a future release.
 
 ### 5. Manual LMA Commands
@@ -492,6 +492,10 @@ class LeadMetaArchitect:
 ---
 
 ## 🌍 Community & Contributing
+
+### Documentation
+
+This repository is committed to maintaining a high standard of documentation. All public modules, classes, and functions are fully documented with Google-style docstrings. We believe that well-documented code is essential for collaboration, maintainability, and a positive developer experience.
 
 ### Contributing Guidelines
 
